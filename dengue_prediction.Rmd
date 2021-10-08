@@ -1,0 +1,115 @@
+---
+title: "DengAI: Predicting Disease Spread"
+author: "Axel Forveille, MAI Tien Long"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r import-library, message=FALSE}
+##### Start an R session
+rm(list=objects())
+library(tidyverse)
+library(lubridate)
+library(corrplot)
+```
+## Introduction 
+In this problem, we need to predict the number of dengue cases in two cities, San Juan and Iquitos for each week, using environmental and climate variables.   
+The data consists of:   
+
+* City and date indicators:   
+  + city: sj or iq, for San Juan, Puerto Rico and Iquitos, Peru.  
+  + year      
+  + week_of_year     
+  + week_start_date     
+* NOAA's GHCN daily climate data weather station measurements:  
+  + station_max_temp_c – Maximum temperature    
+  + station_min_temp_c – Minimum temperature   
+  + station_avg_temp_c – Average temperature     
+  + station_precip_mm – Total precipitation     
+  + station_diur_temp_rng_c – Diurnal temperature range     
+* PERSIANN satellite precipitation measurements (0.25x0.25 degree scale)
+  + precipitation_amt_mm – Total precipitation
+* NOAA's NCEP Climate Forecast System Reanalysis measurements (0.5x0.5 degree scale)
+  + reanalysis_sat_precip_amt_mm – Total precipitation
+  + reanalysis_dew_point_temp_k – Mean dew point temperature
+  + reanalysis_air_temp_k – Mean air temperature
+  + reanalysis_relative_humidity_percent – Mean relative humidity
+  + reanalysis_specific_humidity_g_per_kg – Mean specific humidity
+  + reanalysis_precip_amt_kg_per_m2 – Total precipitation
+  + reanalysis_max_air_temp_k – Maximum air temperature
+  + reanalysis_min_air_temp_k – Minimum air temperature
+  + reanalysis_avg_temp_k – Average air temperature
+  + reanalysis_tdtr_k – Diurnal temperature range
+* Satellite vegetation - Normalized difference vegetation index (NDVI) - NOAA's CDR Normalized Difference Vegetation Index (0.5x0.5 degree scale) measurements
+  + ndvi_se – Pixel southeast of city centroid
+  + ndvi_sw – Pixel southwest of city centroid
+  + ndvi_ne – Pixel northeast of city centroid
+  + ndvi_nw – Pixel northwest of city centroid
+* Prediction for the number of cases for each week   
+
+### How to choose the relevant features for the regression model?
+
+## Import and inspect the training data
+
+```{r import-data, message=FALSE}
+#####Import training data
+dengue_train <- read_delim("dengue_features_train.csv", col_names =TRUE, delim=',')
+dengue_labels_train <- read_delim("dengue_labels_train.csv", col_names =TRUE, delim=',')
+```
+Getting the list of columns in the training data and inspecting the training data:
+```{r names-of-columns-training-data}
+names(dengue_train)
+head(dengue_train)
+```
+Inspecting the training labels:
+```{r}
+head(dengue_labels_train)
+```
+
+```{r}
+#####Seperating data into each city
+
+sj_train <- filter(dengue_train, city == "sj")
+sj_label <- filter(dengue_labels_train, city == "sj")
+iq_train <- filter(dengue_train, city == "iq")
+iq_label <- filter(dengue_labels_train, city == "iq")
+sj_train
+sj_label
+iq_train
+iq_label
+```
+
+## Visualising the data
+
+### San Juan city
+
+```{r}
+#####Visualize the week start date vs the number of cases in San Juan
+par(mfrow = c(1,1))
+plot(sj_train$week_start_date, sj_label$total_cases, type = "l")
+
+
+```
+
+```{r}
+#####Visualize the corresponding weather change using the NOAA’s GHCN daily climate data in San Juan
+plot(sj_train$week_start_date, sj_train$station_avg_temp_c, type = "l")
+lines(sj_train$week_start_date, sj_train$station_min_temp_c, col='blue')
+lines(sj_train$week_start_date, sj_train$station_max_temp_c, col='red')
+
+```
+
+```{r}
+#####Visualize the PERSIANN satellite precipitation measurements
+plot(sj_train$week_start_date, sj_train$precipitation_amt_mm, type = "l")
+
+```
+
+```{r mix-features-with-label-and-draw-correlation-matrix}
+sj_train_with_labels <- mutate(sj_train, total_cases = sj_label$total_cases)
+```
+
+
+
