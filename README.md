@@ -7,4 +7,4 @@ R/wrangle-data.R: Create derived data set, handle missing values and save as R o
 
 R/exploratory-analysis.R: Create some plots and save to the figs directory.
 
-R/linear-model.R: 
+R/linear-model.R: Model the data using linear models. 
