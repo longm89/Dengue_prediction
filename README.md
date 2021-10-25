@@ -1,7 +1,7 @@
 # Dengue prediction.     
 This is the repository for the class Project in Machine Learning.
 
-R/download-data.R: Download csv files to the data directory.  
+R/download-data.R: Download raw csv data files to the data directory.  
 
 R/wrangle-data.R: Create derived data set, handle missing values and save as R objects in rdas directory.  
 

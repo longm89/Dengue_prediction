@@ -27,5 +27,22 @@ save(iq_train, file = "rdas/iq_train.rda")
 
 # take out the population, GDP and transfer it into a dataframe with columns:
 # Country/Year/Population/GDP
-economic_data <- read_delim("data/country_indicators.csv")
-names(economic_data) <- gsub(" ", "", names(economic_data))
+countries_data <- read_delim("data/countries_data.csv", col_names =TRUE, delim=',')
+glimpse(countries_data)
+names(countries_data) <- gsub(" ", "", names(countries_data))
+selected_rows <- c("SP.POP.TOTL", "EN.POP.DNST", "AG.LND.FRST.K2", "NY.GDP.MKTP.CD","SL.EMP.TOTL.SP.FE.ZS", 
+                   "SL.EMP.TOTL.SP.FE.NE.ZS", "SL.EMP.TOTL.SP.MA.ZS", "SL.EMP.TOTL.SP.MA.NE.ZS", "SL.EMP.TOTL.SP.ZS", 
+                   "SL.EMP.TOTL.SP.NE.ZS", "SL.EMP.1524.SP.FE.ZS", "SL.EMP.1524.SP.FE.NE.ZS", "SL.EMP.1524.SP.MA.ZS", 
+                   "SL.EMP.1524.SP.MA.NE.ZS", "SL.EMP.1524.SP.ZS", "SL.EMP.1524.SP.NE.ZS", "SP.POP.0014.TO.ZS","SP.POP.0014.TO","SP.POP.1564.TO.ZS","SP.POP.2024.FE.5Y",
+                   "SP.POP.2024.MA.5Y", "SP.POP.2529.FE.5Y", "SP.POP.2529.MA.5Y", "SP.POP.3034.FE.5Y", "SP.POP.3034.MA.5Y",
+                   "SP.POP.3539.FE.5Y", "SP.POP.3539.MA.5Y", "SP.POP.4044.FE.5Y", "SP.POP.4044.MA.5Y", "SP.POP.4549.FE.5Y",
+                   "SP.POP.4549.MA.5Y", "SP.POP.5054.FE.5Y", "SP.POP.5054.MA.5Y", "SP.POP.5559.FE.5Y", "SP.POP.5559.MA.5Y",
+                   "SP.POP.6064.FE.5Y", "SP.POP.6064.MA.5Y", "SP.POP.65UP.TO.ZS", "SP.POP.65UP.TO", "SP.POP.6569.FE.5Y",
+                   "SP.POP.6569.MA.5Y", "SP.POP.7074.FE.5Y", "SP.POP.7074.MA.5Y", "SP.POP.7579.FE.5Y", "SP.POP.7579.MA.5Y",
+                   "SP.POP.80UP.FE.5Y", "SP.POP.80UP.MA.5Y")
+pri_data <- countries_data %>% 
+  filter(CountryName == "Puerto Rico", SeriesCode %in% selected_rows) %>%
+  select(CountryName:SeriesCode, `1990[YR1990]`:`2008[YR2008]`)
+per_data <- countries_data %>% 
+  filter(CountryName == "Puerto Rico", SeriesCode %in% selected_rows) %>%
+  select(CountryName:SeriesCode, `2000[YR2000]`:`2010[YR2010]`)
