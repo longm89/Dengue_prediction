@@ -3,7 +3,7 @@
 
 rm(list=objects())
 library(tidyverse)
-
+library(data.table)
 ##############################################################################################
 # Import training and label data, separate them into 2 cities and save the data for each city.
 dengue_train <- read_delim("data/dengue_features_train.csv", col_names =TRUE, delim=',')
@@ -42,7 +42,15 @@ selected_rows <- c("SP.POP.TOTL", "EN.POP.DNST", "AG.LND.FRST.K2", "NY.GDP.MKTP.
                    "SP.POP.80UP.FE.5Y", "SP.POP.80UP.MA.5Y")
 pri_data <- countries_data %>% 
   filter(CountryName == "Puerto Rico", SeriesCode %in% selected_rows) %>%
-  select(CountryName:SeriesCode, `1990[YR1990]`:`2008[YR2008]`)
+  select(SeriesName, `1990[YR1990]`:`2008[YR2008]`)
+t_pri_data <- transpose(pri_data)
+colnames(t_pri_data) <- pri_data[["SeriesName"]]
+rownames(t_pri_data) <- colnames(pri_data)
+t_pri_data <- t_pri_data %>% mutate(year = colnames(pri_data)) 
+t_pri_data <- t_pri_data[-c(1), ]
+rownames(t_pri_data) <- 1:19
+t_pri_data$year <- substr(t_pri_data$year, 1, 4)
+
 per_data <- countries_data %>% 
-  filter(CountryName == "Puerto Rico", SeriesCode %in% selected_rows) %>%
+  filter(CountryName == "Peru", SeriesCode %in% selected_rows) %>%
   select(CountryName:SeriesCode, `2000[YR2000]`:`2010[YR2010]`)
