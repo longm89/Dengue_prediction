@@ -49,7 +49,17 @@ rownames(t_pri_data) <- colnames(pri_data)
 t_pri_data <- t_pri_data %>% mutate(year = colnames(pri_data)) 
 t_pri_data <- t_pri_data[-c(1), ]
 rownames(t_pri_data) <- 1:19
-t_pri_data$year <- substr(t_pri_data$year, 1, 4)
+t_pri_data$year <- substr(t_pri_data$year, 1, 4) # fix the years
+# remove empty columns:
+emtpy_columns = c("Employment to population ratio, ages 15-24, female (%) (national estimate)", 
+                  "Employment to population ratio, ages 15-24, male (%) (national estimate)", 
+                  "Employment to population ratio, ages 15-24, total (%) (national estimate)"
+                  )
+t_pri_data <- t_pri_data %>% select(!emtpy_columns) # remove empty columns
+
+t_pri_data <- replace(t_pri_data, t_pri_data == "..", NA)
+sum(is.na(t_pri_data))
+
 
 per_data <- countries_data %>% 
   filter(CountryName == "Peru", SeriesCode %in% selected_rows) %>%
