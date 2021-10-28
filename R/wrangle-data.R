@@ -4,6 +4,8 @@
 rm(list=objects())
 library(tidyverse)
 library(data.table)
+library(janitor)
+library(zoo)
 ##############################################################################################
 # Import training and label data, separate them into 2 cities and save the data for each city.
 dengue_train <- read_delim("data/dengue_features_train.csv", col_names =TRUE, delim=',')
@@ -19,27 +21,26 @@ plot(sj_train$week_start_date, sj_train$total_cases, type = "l")
 plot(iq_train$week_start_date, iq_train$total_cases, type = "l")
 # Deal with the missing values.
 
-# Save the clean data to the rdas folder.
-save(sj_train, file = "rdas/sj_train.rda")
-save(iq_train, file = "rdas/iq_train.rda")
+
 ##############################################################################################
 # Read and process the economic data of the two countries
 
-# take out the population, GDP and transfer it into a dataframe with columns:
-# Country/Year/Population/GDP
+# take out the population, GDP and transfer it into a dataframe 
 countries_data <- read_delim("data/countries_data.csv", col_names =TRUE, delim=',')
 glimpse(countries_data)
 names(countries_data) <- gsub(" ", "", names(countries_data))
 selected_rows <- c("SP.POP.TOTL", "EN.POP.DNST", "AG.LND.FRST.K2", "NY.GDP.MKTP.CD","SL.EMP.TOTL.SP.FE.ZS", 
                    "SL.EMP.TOTL.SP.FE.NE.ZS", "SL.EMP.TOTL.SP.MA.ZS", "SL.EMP.TOTL.SP.MA.NE.ZS", "SL.EMP.TOTL.SP.ZS", 
-                   "SL.EMP.TOTL.SP.NE.ZS", "SL.EMP.1524.SP.FE.ZS", "SL.EMP.1524.SP.FE.NE.ZS", "SL.EMP.1524.SP.MA.ZS", 
-                   "SL.EMP.1524.SP.MA.NE.ZS", "SL.EMP.1524.SP.ZS", "SL.EMP.1524.SP.NE.ZS", "SP.POP.0014.TO.ZS","SP.POP.0014.TO","SP.POP.1564.TO.ZS","SP.POP.2024.FE.5Y",
-                   "SP.POP.2024.MA.5Y", "SP.POP.2529.FE.5Y", "SP.POP.2529.MA.5Y", "SP.POP.3034.FE.5Y", "SP.POP.3034.MA.5Y",
+                   "SL.EMP.TOTL.SP.NE.ZS", "SP.POP.0004.FE.5Y", "SP.POP.0004.MA.5Y", "SP.POP.0509.FE.5Y",
+                   "SP.POP.0509.MA.5Y", "SP.POP.1014.FE.5Y", "SP.POP.1014.MA.5Y", "SP.POP.1519.FE.5Y", "SP.POP.1519.MA.5Y",
+                   "SP.POP.2024.FE.5Y", "SP.POP.2024.MA.5Y", "SP.POP.2529.FE.5Y", "SP.POP.2529.MA.5Y", "SP.POP.3034.FE.5Y", 
+                   "SP.POP.3034.MA.5Y",
                    "SP.POP.3539.FE.5Y", "SP.POP.3539.MA.5Y", "SP.POP.4044.FE.5Y", "SP.POP.4044.MA.5Y", "SP.POP.4549.FE.5Y",
                    "SP.POP.4549.MA.5Y", "SP.POP.5054.FE.5Y", "SP.POP.5054.MA.5Y", "SP.POP.5559.FE.5Y", "SP.POP.5559.MA.5Y",
-                   "SP.POP.6064.FE.5Y", "SP.POP.6064.MA.5Y", "SP.POP.65UP.TO.ZS", "SP.POP.65UP.TO", "SP.POP.6569.FE.5Y",
+                   "SP.POP.6064.FE.5Y", "SP.POP.6064.MA.5Y", "SP.POP.6569.FE.5Y",
                    "SP.POP.6569.MA.5Y", "SP.POP.7074.FE.5Y", "SP.POP.7074.MA.5Y", "SP.POP.7579.FE.5Y", "SP.POP.7579.MA.5Y",
                    "SP.POP.80UP.FE.5Y", "SP.POP.80UP.MA.5Y")
+# process the Puerto Rico data
 pri_data <- countries_data %>% 
   filter(CountryName == "Puerto Rico", SeriesCode %in% selected_rows) %>%
   select(SeriesName, `1990[YR1990]`:`2008[YR2008]`)
@@ -50,17 +51,141 @@ t_pri_data <- t_pri_data %>% mutate(year = colnames(pri_data))
 t_pri_data <- t_pri_data[-c(1), ]
 rownames(t_pri_data) <- 1:19
 t_pri_data$year <- substr(t_pri_data$year, 1, 4) # fix the years
-# remove empty columns:
-emtpy_columns = c("Employment to population ratio, ages 15-24, female (%) (national estimate)", 
-                  "Employment to population ratio, ages 15-24, male (%) (national estimate)", 
-                  "Employment to population ratio, ages 15-24, total (%) (national estimate)"
-                  )
-t_pri_data <- t_pri_data %>% select(!emtpy_columns) # remove empty columns
-
 t_pri_data <- replace(t_pri_data, t_pri_data == "..", NA)
 sum(is.na(t_pri_data))
+t_pri_data <- clean_names(t_pri_data) #clean columns name
+
+# add missing values
+t_pri_data <- na.locf(t_pri_data, na.rm = FALSE)
+t_pri_data <- na.locf(t_pri_data, na.rm = FALSE, fromLast = TRUE)
+t_pri_data <- data.frame(apply(t_pri_data, 2, as.numeric))
+# refine the data
+employment_to_population_cols <- t_pri_data[, 5:10]
+t_pri_data <- t_pri_data %>% mutate(employment_to_population_average = rowMeans(data.frame(employment_to_population_cols)))
+t_pri_data <- t_pri_data[-c(5:10)]
+t_pri_data <- t_pri_data %>%
+  mutate(population_ages_0_9_percent = (population_ages_00_04_female_percent_of_female_population + 
+                                        population_ages_00_04_male_percent_of_male_population + 
+                                        population_ages_05_09_female_percent_of_female_population + 
+                                        population_ages_05_09_male_percent_of_male_population)/2
+                                        ,.keep = "unused")
+t_pri_data <- t_pri_data %>%
+  mutate(population_ages_10_20_percent = (population_ages_10_14_female_percent_of_female_population + 
+                                          population_ages_10_14_male_percent_of_male_population + 
+                                          population_ages_15_19_female_percent_of_female_population + 
+                                          population_ages_15_19_male_percent_of_male_population)/2
+         ,.keep = "unused")
+t_pri_data <- t_pri_data %>%
+  mutate(population_ages_20_60_percent = (population_ages_20_24_female_percent_of_female_population + 
+                                          population_ages_20_24_male_percent_of_male_population + 
+                                          population_ages_25_29_female_percent_of_female_population + 
+                                          population_ages_25_29_male_percent_of_male_population +
+                                          population_ages_30_34_female_percent_of_female_population + 
+                                          population_ages_30_34_male_percent_of_male_population + 
+                                          population_ages_35_39_female_percent_of_female_population + 
+                                          population_ages_35_39_male_percent_of_male_population + 
+                                          population_ages_40_44_female_percent_of_female_population +
+                                          population_ages_40_44_male_percent_of_male_population +
+                                          population_ages_45_49_female_percent_of_female_population +
+                                          population_ages_45_49_male_percent_of_male_population +
+                                          population_ages_50_54_female_percent_of_female_population + 
+                                          population_ages_50_54_male_percent_of_male_population +
+                                          population_ages_55_59_female_percent_of_female_population +
+                                          population_ages_55_59_male_percent_of_male_population)/2
+         ,.keep = "unused")
+t_pri_data <- t_pri_data %>%
+  mutate(population_ages_over_60_percent = (population_ages_60_64_female_percent_of_female_population + 
+                                            population_ages_60_64_male_percent_of_male_population + 
+                                            population_ages_65_69_female_percent_of_female_population + 
+                                            population_ages_65_69_male_percent_of_male_population +
+                                            population_ages_70_74_female_percent_of_female_population + 
+                                            population_ages_70_74_male_percent_of_male_population + 
+                                            population_ages_75_79_female_percent_of_female_population + 
+                                            population_ages_75_79_male_percent_of_male_population +
+                                            population_ages_80_and_above_female_percent_of_female_population + 
+                                            population_ages_80_and_above_male_percent_of_male_population)/2
+         ,.keep = "unused")
+
+t_pri_data$weekofyear <- c(18, 1, 1, 53, 52, 52, 1, 1, 1, 53, 52, 1, 1, 1, 1, 53, 52, 1, 1)
+merged_sj_train <- merge(x = t_pri_data, y = sj_train, all = TRUE)
+#### handling missing data
+merged_sj_train <- as_tibble(merged_sj_train)
+#population_total
+merged_sj_train <- merged_sj_train %>% arrange(merged_sj_train$week_start_date)
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$population_total, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$population_total <- interpol$y
+
+#population_density_people_per_sq_km_of_land_area
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$population_density_people_per_sq_km_of_land_area, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$population_density_people_per_sq_km_of_land_area <- interpol$y
+#forest_area_sq_km
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$forest_area_sq_km, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$forest_area_sq_km <- interpol$y
+#gdp_current_us
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$gdp_current_us, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$gdp_current_us <- interpol$y
+#employment_to_population_average
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$employment_to_population_average, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$employment_to_population_average <- interpol$y
+#population_ages_0_9_percent
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$population_ages_0_9_percent, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$population_ages_0_9_percent <- interpol$y
+#population_ages_10_20_percent
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$population_ages_10_20_percent, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$population_ages_10_20_percent <- interpol$y
+#population_ages_20_60_percent
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$population_ages_20_60_percent, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$population_ages_20_60_percent <- interpol$y
+#population_ages_over_60_percent
+interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$population_ages_over_60_percent, 
+                 method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
+plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
+not_na <- which(!is.na(merged_sj_train$population_total))
+points(merged_sj_train$week_start_date[not_na], interpol$y[not_na], pch=20, col='red', cex=2)
+merged_sj_train$population_ages_over_60_percent <- interpol$y
 
 
+
+
+
+# Data for Peru
 per_data <- countries_data %>% 
   filter(CountryName == "Peru", SeriesCode %in% selected_rows) %>%
   select(CountryName:SeriesCode, `2000[YR2000]`:`2010[YR2010]`)
+##############################################################################################
+#### Save the clean data to the rdas folder.
+save(merged_sj_train, file = "rdas/merged_sj_train.rda")
+
+save(iq_train, file = "rdas/iq_train.rda")
