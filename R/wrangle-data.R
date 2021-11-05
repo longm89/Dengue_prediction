@@ -7,7 +7,7 @@ library(data.table)
 library(janitor)
 library(zoo)
 ##############################################################################################
-# Import training and label data, separate them into 2 cities and save the data for each city.
+### Import training and label data, separate them into 2 cities
 dengue_train <- read_delim("data/dengue_features_train.csv", col_names =TRUE, delim=',')
 dengue_labels_train <- read_delim("data/dengue_labels_train.csv", col_names =TRUE, delim=',')
 sj_train <- filter(dengue_train, city == "sj")
@@ -19,8 +19,71 @@ iq_train$total_cases <- iq_label$total_cases
 par(mfrow = c(2,1))
 plot(sj_train$week_start_date, sj_train$total_cases, type = "l")
 plot(iq_train$week_start_date, iq_train$total_cases, type = "l")
-# Deal with the missing values.
+### Deal with the missing values.
+par(mfrow = c(1,1))
+## missing values for sj_train
+sum(is.na(sj_train)) # 380 missing values for iq
+sum(!is.na(sj_train))
+# find the columns that have missing values
+sj_colnames <- colnames(sj_train)
+for (name in sj_colnames) {
+  num_of_missing_values = sum(is.na(sj_train[name]))
+  if (num_of_missing_values > 0) {
+    message(sprintf("The column %s has %1.0f missing values. \n",name, num_of_missing_values))
+  }
+}
+# go through all the columns and add the missing values
+for (name in sj_colnames) {
+  num_of_missing_values = sum(is.na(sj_train[name]))
+  if (num_of_missing_values > 0) {
+    message(sprintf("###\n Treating column %s with %1.0f missing values. \n",name, num_of_missing_values))
+    interpol<-spline(sj_train$week_start_date, sj_train[[name]], 
+                     method = c("natural"), ties = mean, xout=sj_train$week_start_date)
+    plot(sj_train$week_start_date, interpol$y, col='blue', pch=20)
+    is_na <- which(is.na(sj_train[[name]]))
+    lines(sj_train$week_start_date, sj_train[[name]], col='blue')
+    points(sj_train$week_start_date[is_na], interpol$y[is_na], pch=20, col='red', cex=2)
+    sj_train[[name]] <- interpol$y
+    num_of_missing_values = sum(is.na(sj_train[[name]]))
+    if (num_of_missing_values == 0) {
+      message(sprintf("Finish treating the column %s.\n", name))
+    }
+  }
+}
+sum(is.na(sj_train)) # 0 missing values for sj
+sum(!is.na(sj_train))
 
+## missing values for iq_train
+sum(is.na(iq_train)) # 168 missing values for iq
+sum(!is.na(iq_train))
+# find the columns that have missing values
+iq_colnames <- colnames(iq_train)
+for (name in iq_colnames) {
+  num_of_missing_values = sum(is.na(iq_train[name]))
+  if (num_of_missing_values > 0) {
+    message(sprintf("The column %s has %1.0f missing values. \n",name, num_of_missing_values))
+  }
+}
+# go through all the columns and add the missing values
+for (name in iq_colnames) {
+  num_of_missing_values = sum(is.na(iq_train[name]))
+  if (num_of_missing_values > 0) {
+    message(sprintf("###\n Treating column %s with %1.0f missing values. \n",name, num_of_missing_values))
+    interpol<-spline(iq_train$week_start_date, iq_train[[name]], 
+                     method = c("natural"), ties = mean, xout=iq_train$week_start_date)
+    plot(iq_train$week_start_date, interpol$y, col='blue', pch=20)
+    is_na <- which(is.na(iq_train[[name]]))
+    lines(iq_train$week_start_date, iq_train[[name]], col='blue')
+    points(iq_train$week_start_date[is_na], interpol$y[is_na], pch=20, col='red', cex=2)
+    iq_train[[name]] <- interpol$y
+    num_of_missing_values = sum(is.na(iq_train[[name]]))
+    if (num_of_missing_values == 0) {
+      message(sprintf("Finish treating the column %s.\n", name))
+    }
+  }
+}
+sum(is.na(iq_train)) # 0 missing values for iq
+sum(!is.na(iq_train))
 
 ##############################################################################################
 # Read and process the economic data of the two countries
@@ -112,8 +175,8 @@ t_pri_data$weekofyear <- c(18, 1, 1, 53, 52, 52, 1, 1, 1, 53, 52, 1, 1, 1, 1, 53
 merged_sj_train <- merge(x = t_pri_data, y = sj_train, all = TRUE)
 #### handling missing data
 merged_sj_train <- as_tibble(merged_sj_train)
-#population_total
 merged_sj_train <- merged_sj_train %>% arrange(merged_sj_train$week_start_date)
+#population_total
 interpol<-spline(merged_sj_train$week_start_date, merged_sj_train$population_total, 
                  method = c("natural"), ties = mean, xout=merged_sj_train$week_start_date)
 plot(merged_sj_train$week_start_date, interpol$y, col='blue', pch=20)
