@@ -18,6 +18,7 @@ mape<-function(y,ychap)
 }
 
 ###############Import data
+getwd()
 load("rdas/merged_iq_train.rda")
 names(merged_iq_train)
 head(merged_iq_train)

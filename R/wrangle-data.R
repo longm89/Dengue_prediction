@@ -106,7 +106,7 @@ selected_rows <- c("SP.POP.TOTL", "EN.POP.DNST", "AG.LND.FRST.K2", "NY.GDP.MKTP.
 # process the Puerto Rico data
 pri_data <- countries_data %>% 
   filter(CountryName == "Puerto Rico", SeriesCode %in% selected_rows) %>%
-  select(SeriesName, `1990[YR1990]`:`2008[YR2008]`)
+  dplyr::select(SeriesName, `1990[YR1990]`:`2008[YR2008]`)
 t_pri_data <- transpose(pri_data)
 colnames(t_pri_data) <- pri_data[["SeriesName"]]
 rownames(t_pri_data) <- colnames(pri_data)
@@ -248,7 +248,7 @@ merged_sj_train$population_ages_over_60_percent <- interpol$y
 # Data for Peru
 per_data <- countries_data %>% 
   filter(CountryName == "Peru", SeriesCode %in% selected_rows) %>%
-  select(SeriesName, `2000[YR2000]`:`2010[YR2010]`)
+  dplyr::select(SeriesName, `2000[YR2000]`:`2010[YR2010]`)
 t_per_data <- transpose(per_data)
 colnames(t_per_data) <- per_data[["SeriesName"]]
 rownames(t_per_data) <- colnames(per_data)
@@ -386,4 +386,4 @@ merged_iq_train$population_ages_over_60_percent <- interpol$y
 #### Save the clean data to the rdas folder.
 save(merged_sj_train, file = "rdas/merged_sj_train.rda")
 
-save(iq_train, file = "rdas/merged_iq_train.rda")
+save(merged_iq_train, file = "rdas/merged_iq_train.rda")
