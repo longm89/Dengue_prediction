@@ -19,6 +19,7 @@ iq_train$total_cases <- iq_label$total_cases
 par(mfrow = c(2,1))
 plot(sj_train$week_start_date, sj_train$total_cases, type = "l")
 plot(iq_train$week_start_date, iq_train$total_cases, type = "l")
+plot(iq_train$station_avg_temp_c, type = "l")
 ### Deal with the missing values.
 par(mfrow = c(1,1))
 ## missing values for sj_train
