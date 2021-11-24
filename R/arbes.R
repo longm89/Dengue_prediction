@@ -37,8 +37,6 @@ summary(tree_iq)
 plot(tree_iq)
 text(tree_iq, pretty = 0)
 ychap.tree_iq <- predict(tree_iq, newdata = iq_test)
-mae(iq_test$total_cases, ychap.tree_iq)
-rmse(iq_test$total_cases - ychap.tree_iq)
 #The following variables are selected to fit the tree:
 #"reanalysis_specific_humidity_g_per_kg"                                  
 #"forest_area_sq_km"                    
@@ -52,8 +50,42 @@ rmse(iq_test$total_cases - ychap.tree_iq)
 # year
 # weekofyear
 # the tree has 12 nodes
-mae(iq_test$total_cases, ychap.tree_iq)
-rmse(iq_test$total_cases - ychap.tree_iq)
+mae(iq_test$total_cases, ychap.tree_iq) # 6.59
+rmse(iq_test$total_cases - ychap.tree_iq) # 12
 plot(iq_test$total_cases, type='l')
 lines(ychap.tree_iq,col='red')
 
+#############Try another tree with prunning
+
+treefit <- tree(total_cases ~ reanalysis_specific_humidity_g_per_kg + forest_area_sq_km
+              + employment_to_population_average + population_total
+              + precipitation_amt_mm + station_min_temp_c + reanalysis_dew_point_temp_k
+              + ndvi_ne + reanalysis_min_air_temp_k + year + weekofyear,
+              data = iq_train,
+              control = tree.control(nobs = nrow(iq_train), minsize=1, mindev=0))
+summary(treefit)
+plot(treefit)
+text(treefit,cex=.1)
+ychap <- predict(treefit, newdata = iq_test)
+mae(iq_test$total_cases, ychap)
+rmse(iq_test$total_cases - ychap)
+
+treefit.cv <- cv.tree(treefit, FUN = prune.tree, K=10)
+plot(tail(treefit.cv$size,10),tail(treefit.cv$dev,10),type='l',xlab="Size",ylab="Deviance")
+plot(treefit.cv$size,treefit.cv$dev,type='l',xlab="Size",ylab="Deviance")
+
+size.opt <- 13
+treefit.prune <- prune.tree(treefit, best=size.opt)
+plot(treefit.prune)
+text(treefit.prune, cex=.8)
+
+summary(treefit.prune)
+
+
+ychap.tree<-predict(treefit.prune, newdata = iq_test)
+mae(iq_test$total_cases, ychap.tree)
+rmse(iq_test$total_cases - ychap.tree)
+
+plot(iq_test$total_cases, type='l')
+lines(ychap.tree, col='red')
+lines(ychap, col='blue')
