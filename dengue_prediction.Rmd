@@ -8,16 +8,16 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 ```{r echo=FALSE, message=FALSE}
-##### Start an R session
+##### Start an R session and import the library
 rm(list=objects())
 ```
 ## Introduction 
 The purpose of the project is to predict the number of dengue cases in two cities, San Juan and Iquitos for each week, using environmental and climate variables. The challenge was organized in 2015 by several departments in the U.S. Federal Government (Department of Health and Human Services, Department of Defense, Department of Commerce, and the Department of Homeland Security), with the support of the Pandemic Prediction and Forecasting Science and Technology Interagency Working Group under the National Science and Technology Council (https://dengueforecasting.noaa.gov/).
 
 #### Data 
-The data for the challenge consists of:   
+The data for each city consists of:   
 
-* City and week indicators.   
+* week indicators.   
 * NOAA's GHCN daily climate data weather station measurements.  
 * PERSIANN satellite precipitation measurements.
 * NOAA's NCEP Climate Forecast System Reanalysis measurements.
@@ -37,7 +37,7 @@ Another data that can affect the spread of the disease is the number of migratio
 
 #### Methods
 
-##### Nagative Binomial Distribution model
+##### Negative Binomial Distribution model
 As the total number of cases does not follow a Gaussian distribution, and this is a counting variable, we should use the Poisson distribution or the Negative Binomial distribution model. 
 
 ##### Model GAM 
@@ -51,10 +51,110 @@ As the total number of cases does not follow a Gaussian distribution, and this i
 ##### Gradient Boosting
 
 ## Data Wrangling and Exploration 
+#### Data Wrangling   
+##### Data from the challenge 
 
-## Modeling and prevision
+We separate the data into two parts for each country and add the missing values using spline interpolation.   
 
-##### Nagative Binomial Distribution model
+##### Data from WorldBank           
+
+We download the data from WorldBank and we select important variables that might contribute to the prediction of the number of Dengue cases:
+* Total population       
+* population_density_people_per_sq_km_of_land_area       
+* forest_area_sq_km       
+* gdp_current_us        
+* employment_to_population_average      
+* Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+  
+
+#### Data Exploration   
+```{r echo = FALSE, message = FALSE}
+# import the library
+library(ggplot2)
+library(corrplot)
+library(dplyr)
+library(lubridate)
+library(scales)
+library(gridExtra)
+library(ggthemes)
+```
+```{r}
+
+# import the cleaned data
+load("rdas/merged_iq_train.rda")
+names(merged_iq_train)
+
+load("rdas/merged_sj_train.rda")
+names(merged_sj_train)
+```
+
+##### Visualising the number of cases over the year:
+```{r echo = FALSE, message = FALSE}
+######## Drawing the two time series
+# for Iquitos
+# Define Start and end times for the subset as R objects that are the time class
+startTime_iq <- as.Date("2001-01-01")
+endTime_iq <- as.Date("2010-01-01")
+# create a start and end time R object
+limits_iq <- c(startTime_iq, endTime_iq)
+iq_weekly_cases <- ggplot(merged_iq_train, aes(week_start_date, total_cases)) +
+  geom_line(na.rm=TRUE) + 
+  ggtitle("Total number of cases from 2001 - 2010 in Iquitos") +
+  xlab("Date") + ylab("Total number of cases")
+# format x-axis: dates
+iq_weekly_cases_time_series <- iq_weekly_cases + 
+  (scale_x_date(limits = limits_iq,
+                breaks = date_breaks("1 year"),
+                labels = date_format("%b %y")))
+
+iq_weekly_cases_time_series
+
+# for San Juan
+# create a start and end time R object
+startTime_sj <- as.Date("1990-04-30")
+endTime_sj <- as.Date("2000-04-22")
+
+limits_sj <- c(startTime_sj, endTime_sj)
+sj_weekly_cases <- ggplot(merged_sj_train, aes(week_start_date, total_cases)) +
+  geom_line(na.rm=TRUE) + 
+  ggtitle("Total number of cases from 1990 - 2008 in San Juan") +
+  xlab("Date") + ylab("Total number of cases")
+# format x-axis: dates
+sj_weekly_cases_time_series <- sj_weekly_cases + 
+  (scale_x_date(limits = limits_sj,
+                breaks = date_breaks("1 year"),
+                labels = date_format("%b %y")))
+
+sj_weekly_cases_time_series
+
+
+```
+```{r}
+# draw the two histograms
+iq_histogram <- ggplot(data=merged_iq_train, aes(total_cases)) +
+  geom_histogram(aes(y =..density..), fill = "orange") +
+  geom_density()
+
+sj_histogram <- ggplot(data=merged_sj_train, aes(total_cases)) +
+  geom_histogram(aes(y =..density..), fill = "orange") +
+  geom_density()
+
+grid.arrange(iq_histogram, sj_histogram, ncol=2)
+mean(merged_iq_train$total_cases)
+var(merged_iq_train$total_cases)
+
+mean(merged_sj_train$total_cases)
+var(merged_sj_train$total_cases)
+```
+
+Some observations:
+
+* There are more cases in San Juan than Iquitos   
+* There are the peaks that we would like to predict. They happen in what months? Are there periods or seasonality trends?       
+* The number of cases for both cities do not follow Gaussian distributions. It suggests that we should use Generalized linear model, as described in Chapter 2 of Simon N. Wood's book: Generalized Additive Models. The number of cases are natural numbers, we will assume that they follow Poisson distribution or Binomial distribution (page 61 of Wood's book), and in particular Binomial distribution as the mean is different from the variance.We could try to model the cases using the Generalized linear models.
+
+## Modeling and Prediction
+
+##### Negative Binomial Distribution model
 
 ##### Model GAM 
 
