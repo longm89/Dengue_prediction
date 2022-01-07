@@ -1,3 +1,7 @@
+# add data: sin and cos
+# add data: arriving of people
+# add the interactions: humidity + high temperature
+
 # Take the raw data from the data directory and create refined data ready to do analysis. 
 # The new data is saved in the rdas directory.
 
