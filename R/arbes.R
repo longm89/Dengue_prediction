@@ -24,6 +24,9 @@ getwd()
 load("rdas/merged_iq_train.rda")
 names(merged_iq_train)
 head(merged_iq_train)
+load("rdas/merged_iq_train.rda")
+names(merged_iq_train)
+head(merged_iq_train)
 #### adding the periodicity of 2 years variable
 w <- 2*pi/36
 Time <- 1:nrow(merged_iq_train)

@@ -1,7 +1,7 @@
 ---
 title: "Dengue Forecasting"
 author: "Axel Forveille, MAI Tien Long"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -77,14 +77,13 @@ library(scales)
 library(gridExtra)
 library(ggthemes)
 ```
+For each city, we have the following variables:
 ```{r}
 
 # import the cleaned data
 load("rdas/merged_iq_train.rda")
-names(merged_iq_train)
-
 load("rdas/merged_sj_train.rda")
-names(merged_sj_train)
+names(merged_iq_train)
 ```
 
 ##### Visualising the number of cases over the year:
@@ -150,21 +149,78 @@ Some observations:
 
 * There are more cases in San Juan than Iquitos   
 * There are the peaks that we would like to predict. They happen in what months? Are there periods or seasonality trends?       
-* The number of cases for both cities do not follow Gaussian distributions. It suggests that we should use Generalized linear model, as described in Chapter 2 of Simon N. Wood's book: Generalized Additive Models. The number of cases are natural numbers, we will assume that they follow Poisson distribution or Binomial distribution (page 61 of Wood's book), and in particular Binomial distribution as the mean is different from the variance.We could try to model the cases using the Generalized linear models.
+* The number of cases for both cities do not follow Gaussian distributions. It suggests that we should use Generalized Linear Model, as described in Simon N. Wood's book: Generalized Additive Models. The number of cases are natural numbers, we will assume that they follow Poisson distribution or Negative Binomial distribution, and in particular Negative Binomial distribution as the mean is much smaller than the variance. In fact, the Poisson distribution can be interpreted as a special case of the Negative Binomial distribution when the parameter $r \rightarrow \infty$ and is used as a way to model an over-dispersed Poisson distribution.
 
 ## Modeling and Prediction
+### Preparing the data for training and testing
+A simple method for training and evaluating the models, simple validation, is to split the data into training set and testing set. As our data is time series, instead of a random split, we should split our time series with respect to chronology, so that we could train our models on the past data, and test the predictions on the future. To improve consistency, we will use instead an analogue of cross validation for time series, called sliding windows. 
+```{r fig.align = 'center', out.width = "50%", fig.cap = "The Sliding Windows method, the picture is taken from Uber's Engineering blog: https://eng.uber.com/omphalos/"}
+knitr::include_graphics(here::here("", "figs/sliding_windows_method.png"))
+```
+To implement the method, we will choose the length of the training set train_size, the length of the test set test_size, and the step_size that we will move. The step_size corresponds to the length of the dropped part in Pass 2 in the picture. We implement the function below to build a list of (start_train, end_train, start_test, end_test) to train and evaluate the models.
+```{r}
+# The following function implements the Sliding windows method, 
+# an analogue of Cross Validation for Time Series
+# The following function receives an input of train_size, test_size, step_size 
+# and returns a list of vectors of 4 parameters:
+# (start_train, end_train, start_test, end_test)
 
-##### Negative Binomial Distribution model
+build_sliding_windows <- function(dataset, train_size, test_size, step_size) {
+  start_train <- 1 
+  end_train <- start_train + train_size - 1
+  start_test <- end_train + 1
+  end_test <- start_test + test_size - 1
+  
+  plans <- list()
+  while (end_test < nrow(dataset)) {
+    plans_length = length(plans)
+    plans[[plans_length + 1]] <- c(start_train, end_train, start_test, end_test)
+    
+    start_train <- start_train + step_size
+    end_train <- start_train + train_size - 1
+    start_test <- end_train + 1
+    end_test <- start_test + test_size - 1
+  }
+  plans
+}
+```
+Applying to our dataset, we will choose:          
+* train_size = 60% of the length of the dataset       
+* test_size = 20 % of the length of the dataset          
+* step_size = 10          
+```{r}
+sj_train_size <- round(nrow(merged_sj_train) * 0.6)
+sj_test_size <- round(nrow(merged_sj_train) * 0.2)
+sj_step_size <- 10
+sj_plans <- build_sliding_windows(merged_sj_train, sj_train_size, sj_test_size, sj_step_size)
+sj_plans
 
-##### Model GAM 
+```
+```{r}
+iq_train_size <- round(nrow(merged_iq_train) * 0.6)
+iq_test_size <- round(nrow(merged_iq_train) * 0.2)
+iq_step_size <- 10
+iq_plans <- build_sliding_windows(merged_iq_train, iq_train_size, iq_test_size, iq_step_size)
+iq_plans
 
-##### Regression Tree 
+```
 
-##### Random Forest
+### Generalized Linear Models with Negative Binomial Distribution family.
 
-##### Times Series (ARIMA/SARIMA)
+### GAM models
 
-##### Gradient Boosting
+### Regression Tree 
+In this session, we look at Regression tree, a simple method that doesn't require any assumption on the distribution of the variables. It gives a simple method to choose the variables.
+```{r}
+
+```
+
+
+### Random Forest
+
+### Times Series (ARIMA/SARIMA)
+
+### Gradient Boosting
 
 ## Conclusion
 
