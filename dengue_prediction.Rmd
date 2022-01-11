@@ -17,18 +17,18 @@ The purpose of the project is to predict the number of dengue cases in two citie
 #### Data 
 The data for each city consists of:   
 
-* week indicators.   
-* NOAA's GHCN daily climate data weather station measurements.  
-* PERSIANN satellite precipitation measurements.
+* Time indicators
+* NOAA's GHCN daily climate data weather station measurements.     
+* PERSIANN satellite precipitation measurements.      
 * NOAA's NCEP Climate Forecast System Reanalysis measurements.
 * Satellite vegetation. 
-* Prediction for the number of cases for each week.
+* The number of cases for each week.
 
-Additionally, we downloaded the social and economic data from WorldBank and we chose several parameters that might explain the number of cases:
+Additionally, we downloaded the environmental, social and economic data from WorldBank and we chose several parameters that might explain the number of cases:
 
+* forest_area_sq_km 
 * Total population       
 * population_density_people_per_sq_km_of_land_area       
-* forest_area_sq_km       
 * gdp_current_us        
 * employment_to_population_average      
 * Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+            
@@ -37,8 +37,8 @@ Another data that can affect the spread of the disease is the number of migratio
 
 #### Methods
 
-##### Negative Binomial Distribution model
-As the total number of cases does not follow a Gaussian distribution, and this is a counting variable, we should use the Poisson distribution or the Negative Binomial distribution model. 
+##### Generalized Linear Models with the Negative Binomial Distribution family
+
 
 ##### Model GAM 
 
@@ -53,18 +53,56 @@ As the total number of cases does not follow a Gaussian distribution, and this i
 ## Data Wrangling and Exploration 
 #### Data Wrangling   
 ##### Data from the challenge 
+The data for each city consists of:   
 
+* Time indicators:     
+  + week_start_date         
+  + year
+* NOAA's GHCN daily climate data weather station measurements.     
+  + station_max_temp_c - maximum temperature          
+  + station_min_temp_c - minimum temperature          
+  + station_avg_temp_c - average temperature          
+  + station_precip_mm - total precipitation           
+  + station_diur_temp_rng_c - diurnal temperature range
+* PERSIANN satellite precipitation measurements.      
+  + precipitation_amt_mm - total precipitation       
+* NOAA's NCEP Climate Forecast System Reanalysis measurements.
+  + reanalysis_sat_precip_amt_mm – Total precipitation
+  + reanalysis_dew_point_temp_k – Mean dew point temperature
+  + reanalysis_air_temp_k – Mean air temperature
+  + reanalysis_relative_humidity_percent – Mean relative humidity
+  + reanalysis_specific_humidity_g_per_kg – Mean specific humidity
+  + reanalysis_precip_amt_kg_per_m2 – Total precipitation
+  + reanalysis_max_air_temp_k – Maximum air temperature
+  + reanalysis_min_air_temp_k – Minimum air temperature
+  + reanalysis_avg_temp_k – Average air temperature
+  + reanalysis_tdtr_k – Diurnal temperature range
+* Satellite vegetation. 
+  + ndvi_se – Pixel southeast of city centroid
+  + ndvi_sw – Pixel southwest of city centroid
+  + ndvi_ne – Pixel northeast of city centroid
+  + ndvi_nw – Pixel northwest of city centroid
+  
 We separate the data into two parts for each country and add the missing values using spline interpolation.   
 
 ##### Data from WorldBank           
 
-We download the data from WorldBank and we select important variables that might contribute to the prediction of the number of Dengue cases:
+We download the data from WorldBank, clean and select important variables that might contribute to the prediction of the number of Dengue cases:
 * Total population       
 * population_density_people_per_sq_km_of_land_area       
 * forest_area_sq_km       
 * gdp_current_us        
 * employment_to_population_average      
-* Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+  
+* Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+
+
+We see that all the explicable variables make sense. We can group them into the following groups:
+* Climate variables       
+* Time of the year     
+* Total population       
+* Population density       
+* Population age      
+* Economical condition   
+There are several variables from climate variables correlate with each other. 
 
 #### Data Exploration   
 ```{r echo = FALSE, message = FALSE}
@@ -188,7 +226,7 @@ Applying to our dataset, we will choose:
 * train_size = 60% of the length of the dataset       
 * test_size = 20 % of the length of the dataset          
 * step_size = 20 weeks      
-The procedure then gives 10 and 6 folds for 
+The procedure then gives 10 and 6 folds for San Juan and Iquitos.
 ```{r}
 sj_train_size <- round(nrow(merged_sj_train) * 0.6)
 sj_test_size <- round(nrow(merged_sj_train) * 0.2)
@@ -216,6 +254,41 @@ mae<-function(y, ychap)
 ### Generalized Linear Models with Negative Binomial Distribution family.
 
 ### GAM models
+```{r echo = FALSE, message = FALSE}
+library(mgcv)
+library(tidymv)
+library(mgcViz)
+```
+For Iquitos: 
+
+```{r}
+iq_mae <- c()
+for (iq_plan in iq_plans){
+  iq_train <- merged_iq_train %>% slice(iq_plan[1]:iq_plan[2]) %>%
+      select(-c(year, weekofyear))
+  iq_test <- merged_iq_train %>% slice(iq_plan[3]:iq_plan[4]) %>%
+      select(-c(year, weekofyear))
+  g3 <- gam(total_cases ~ s(forest_area_sq_km) + s(reanalysis_min_air_temp_k) + s(reanalysis_specific_humidity_g_per_kg)        
+  + s(reanalysis_dew_point_temp_k) 
+  + s(population_total) 
+  + s(population_density_people_per_sq_km_of_land_area)   
+  + s(population_ages_0_9_percent)        
+  + s(population_ages_10_20_percent)  
+  + s(gdp_current_us)   
+  + s(employment_to_population_average), 
+          SELECT = TRUE,family = nb(), data = merged_iq_train, method="REML")
+  summary(g3)
+  plot(g3, pages = 1)
+  ychap <- predict(g3, newdata = iq_test, type = "response")
+  mae(iq_test$total_cases, ychap)
+  iq_mae <- append(iq_mae, mae(iq_test$total_cases, ychap))
+  plot(iq_test$total_cases, type='l')
+  lines(ychap,col='red')
+}
+mean(iq_mae)
+```
+
+
 
 ### Regression Tree 
 In this section, we look at Regression tree, a simple method that doesn't require any assumption on the distribution of the variables, and moreover, gives a way to select variables.
@@ -227,11 +300,14 @@ library(vip) # for feature importance
 ```
 We first look at Iquitos:
 
-```{r}
+```{r echo = TRUE, MESSAGE = FALSE, results='hide'}
+# remove the results = 'hide' to see all the graphs for all the models in the Cross Validation.
 iq_mae <- c()
 for (iq_plan in iq_plans){
-  iq_train <- merged_iq_train %>% slice(iq_plan[1]:iq_plan[2])
-  iq_test <- merged_iq_train %>% slice(iq_plan[3]:iq_plan[4])
+  iq_train <- merged_iq_train %>% slice(iq_plan[1]:iq_plan[2]) %>%
+      select(-c(year, weekofyear))
+  iq_test <- merged_iq_train %>% slice(iq_plan[3]:iq_plan[4]) %>%
+      select(-c(year, weekofyear))
   tree_iq <- rpart(formula = total_cases ~ ., 
                  data = iq_train,
                  method = "anova")
@@ -248,12 +324,75 @@ for (iq_plan in iq_plans){
 }
 
 ```
+For San Juan:      
+```{r echo = TRUE, MESSAGE = FALSE, results='hide'}
+# remove the results = 'hide' to see all the graphs for all the models in the Cross Validation.
+sj_mae <- c()
+for (sj_plan in sj_plans){
+  sj_train <- merged_sj_train %>% slice(sj_plan[1]:sj_plan[2]) %>%
+      select(-c(year, weekofyear))
+  sj_test <- merged_sj_train %>% slice(sj_plan[3]:sj_plan[4]) %>%
+      select(-c(year, weekofyear))
+  tree_sj <- rpart(formula = total_cases ~ ., 
+                 data = sj_train,
+                 method = "anova")
+  rpart.plot(tree_sj)
+  ychap.tree_sj <- predict(tree_sj, newdata = sj_train)
+  plot(sj_train$total_cases, type='l')
+  lines(ychap.tree_sj,col='red')
+  ychap.tree_sj <- predict(tree_sj, newdata = sj_test)
+  mae(sj_test$total_cases, ychap.tree_sj)
+  sj_mae <- append(sj_mae, mae(sj_test$total_cases, ychap.tree_sj))
+  plot(sj_test$total_cases, type='l')
+  lines(ychap.tree_sj,col='red')
+  print(vip(tree_sj, num_features = 10, bar = FALSE)) # return the importance of the features
+}
+
+```
 ```{r}
 mean(iq_mae)
+mean(sj_mae)
 ```
 
+#### Conclusion:
+##### For Iquitos:       
+* The Cross Validation mean MAE score for Iquitos is 11.13833 
+* Going through different models in CV, we collect the important features to predict the number of cases:       
+  + forest_area_sq_km   
+  + reanalysis_min_air_temp_k      
+  + reanalysis_specific_humidity_g_per_kg       
+  + reanalysis_dew_point_temp_k       
+  + reanalysis_precip_amt_kg_per_m2       
+  + ndvi_nw        
+  + station_avg_temp_c         
+  + station_max_temp_c  
+  + population_total           
+  + population_density_people_per_sq_km_of_land_area   
+  + population_ages_0_9_percent        
+  + population_ages_10_20_percent  
+  + gdp_current_us   
+  + employment_to_population_average 
 
 
+##### For San Juan:     
+* The Cross Validation mean MAE score for San Juan is 28.181 
+* Going through different models in CV, we collect the important features to predict the number of cases: 
+  + ndvi_se       
+  + ndvi_nw     
+  + ndvi_sw       
+  + reanalysis_dew_point_temp_k      
+  + reanalysis_specific_humidity_g_per_kg     
+  + renalysis_max_air_temp_k     
+  + forest_area_sq_km  
+  + population_total  
+  + population_density_people_per_sq_km_of_land_area
+  + population_ages_0_9_percent     
+  + gdp_current_us    
+  + employment_to_population_average
+     
+
+  
+We should remark that Regression Tree minimizes the residual sum of squares error and we are looking at min MAE error.
 
 ### Random Forest
 

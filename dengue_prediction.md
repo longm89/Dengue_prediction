@@ -18,19 +18,20 @@ Group under the National Science and Technology Council
 
 The data for each city consists of:
 
--   week indicators.  
+-   Time indicators
 -   NOAA’s GHCN daily climate data weather station measurements.  
--   PERSIANN satellite precipitation measurements.
+-   PERSIANN satellite precipitation measurements.  
 -   NOAA’s NCEP Climate Forecast System Reanalysis measurements.
 -   Satellite vegetation.
--   Prediction for the number of cases for each week.
+-   The number of cases for each week.
 
-Additionally, we downloaded the social and economic data from WorldBank
-and we chose several parameters that might explain the number of cases:
+Additionally, we downloaded the environmental, social and economic data
+from WorldBank and we chose several parameters that might explain the
+number of cases:
 
+-   forest_area_sq_km
 -   Total population  
 -   population_density_people_per_sq_km_of_land_area  
--   forest_area_sq_km  
 -   gdp_current_us  
 -   employment_to_population_average  
 -   Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+
@@ -62,19 +63,59 @@ or the Negative Binomial distribution model.
 
 ##### Data from the challenge
 
+The data for each city consists of:
+
+-   Time indicators:
+    -   week_start_date  
+    -   year
+-   NOAA’s GHCN daily climate data weather station measurements.
+    -   station_max_temp_c - maximum temperature  
+    -   station_min_temp_c - minimum temperature  
+    -   station_avg_temp_c - average temperature  
+    -   station_precip_mm - total precipitation  
+    -   station_diur_temp_rng_c - diurnal temperature range
+-   PERSIANN satellite precipitation measurements.
+    -   precipitation_amt_mm - total precipitation  
+-   NOAA’s NCEP Climate Forecast System Reanalysis measurements.
+    -   reanalysis_sat_precip_amt_mm – Total precipitation
+    -   reanalysis_dew_point_temp_k – Mean dew point temperature
+    -   reanalysis_air_temp_k – Mean air temperature
+    -   reanalysis_relative_humidity_percent – Mean relative humidity
+    -   reanalysis_specific_humidity_g\_per_kg – Mean specific humidity
+    -   reanalysis_precip_amt_kg_per_m2 – Total precipitation
+    -   reanalysis_max_air_temp_k – Maximum air temperature
+    -   reanalysis_min_air_temp_k – Minimum air temperature
+    -   reanalysis_avg_temp_k – Average air temperature
+    -   reanalysis_tdtr_k – Diurnal temperature range
+-   Satellite vegetation.
+    -   ndvi_se – Pixel southeast of city centroid
+    -   ndvi_sw – Pixel southwest of city centroid
+    -   ndvi_ne – Pixel northeast of city centroid
+    -   ndvi_nw – Pixel northwest of city centroid
+
 We separate the data into two parts for each country and add the missing
 values using spline interpolation.
 
 ##### Data from WorldBank
 
-We download the data from WorldBank and we select important variables
-that might contribute to the prediction of the number of Dengue cases:
-\* Total population  
+We download the data from WorldBank, clean and select important
+variables that might contribute to the prediction of the number of
+Dengue cases: \* Total population  
 \* population_density_people_per_sq_km_of_land_area  
 \* forest_area_sq_km  
 \* gdp_current_us  
 \* employment_to_population_average  
 \* Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+
+
+We see that all the explicable variables make sense. We can group them
+into the following groups: \* Climate variables  
+\* Time of the year  
+\* Total population  
+\* Population density  
+\* Population age  
+\* Economical condition  
+There are several variables from climate variables correlate with each
+other.
 
 #### Data Exploration
 
@@ -239,7 +280,7 @@ Applying to our dataset, we will choose:
 \* train_size = 60% of the length of the dataset  
 \* test_size = 20 % of the length of the dataset  
 \* step_size = 20 weeks  
-The procedure then gives 10 and 6 folds for
+The procedure then gives 10 and 6 folds for San Juan and Iquitos.
 
 ``` r
 sj_train_size <- round(nrow(merged_sj_train) * 0.6)
@@ -318,6 +359,117 @@ mae<-function(y, ychap)
 
 ### GAM models
 
+``` r
+library(mgcv)
+```
+
+    ## Le chargement a nécessité le package : nlme
+
+    ## 
+    ## Attachement du package : 'nlme'
+
+    ## L'objet suivant est masqué depuis 'package:dplyr':
+    ## 
+    ##     collapse
+
+    ## This is mgcv 1.8-38. For overview type 'help("mgcv-package")'.
+
+``` r
+library(tidymv)
+library(mgcViz)
+```
+
+    ## Le chargement a nécessité le package : qgam
+
+    ## Registered S3 method overwritten by 'GGally':
+    ##   method from   
+    ##   +.gg   ggplot2
+
+    ## Registered S3 method overwritten by 'mgcViz':
+    ##   method from  
+    ##   +.gg   GGally
+
+    ## 
+    ## Attachement du package : 'mgcViz'
+
+    ## Les objets suivants sont masqués depuis 'package:stats':
+    ## 
+    ##     qqline, qqnorm, qqplot
+
+``` r
+g3 <- gam(total_cases ~ s(forest_area_sq_km) + s(reanalysis_min_air_temp_k) + s(reanalysis_specific_humidity_g_per_kg)        
+  + s(reanalysis_dew_point_temp_k) 
+  + s(population_total) 
+  + s(population_density_people_per_sq_km_of_land_area)   
+  + s(population_ages_0_9_percent)        
+  + s(population_ages_10_20_percent)  
+  + s(gdp_current_us)   
+  + s(employment_to_population_average), 
+          SELECT = TRUE,family = nb(), data = merged_iq_train, method="REML")
+summary(g3)
+```
+
+    ## 
+    ## Family: Negative Binomial(2.856) 
+    ## Link function: log 
+    ## 
+    ## Formula:
+    ## total_cases ~ s(forest_area_sq_km) + s(reanalysis_min_air_temp_k) + 
+    ##     s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + 
+    ##     s(population_total) + s(population_density_people_per_sq_km_of_land_area) + 
+    ##     s(population_ages_0_9_percent) + s(population_ages_10_20_percent) + 
+    ##     s(gdp_current_us) + s(employment_to_population_average)
+    ## 
+    ## Parametric coefficients:
+    ##             Estimate Std. Error z value Pr(>|z|)    
+    ## (Intercept)  1.15662    0.09171   12.61   <2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Approximate significance of smooth terms:
+    ##                                                       edf Ref.df Chi.sq p-value
+    ## s(forest_area_sq_km)                                1.000  1.000  1.055 0.30443
+    ## s(reanalysis_min_air_temp_k)                        1.000  1.001  0.121 0.72818
+    ## s(reanalysis_specific_humidity_g_per_kg)            3.651  4.716  7.407 0.17994
+    ## s(reanalysis_dew_point_temp_k)                      1.000  1.000  5.597 0.01800
+    ## s(population_total)                                 2.345  2.480 13.465 0.00418
+    ## s(population_density_people_per_sq_km_of_land_area) 3.345  3.480  0.329 0.98094
+    ## s(population_ages_0_9_percent)                      1.000  1.000  0.070 0.79177
+    ## s(population_ages_10_20_percent)                    6.264  6.567 23.915 0.04258
+    ## s(gdp_current_us)                                   5.991  6.270 49.943 < 2e-16
+    ## s(employment_to_population_average)                 6.899  7.473 44.568 < 2e-16
+    ##                                                        
+    ## s(forest_area_sq_km)                                   
+    ## s(reanalysis_min_air_temp_k)                           
+    ## s(reanalysis_specific_humidity_g_per_kg)               
+    ## s(reanalysis_dew_point_temp_k)                      *  
+    ## s(population_total)                                 ** 
+    ## s(population_density_people_per_sq_km_of_land_area)    
+    ## s(population_ages_0_9_percent)                         
+    ## s(population_ages_10_20_percent)                    *  
+    ## s(gdp_current_us)                                   ***
+    ## s(employment_to_population_average)                 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Rank: 90/91
+    ## R-sq.(adj) =  0.386   Deviance explained = 69.4%
+    ## -REML = 1357.7  Scale est. = 1         n = 520
+
+``` r
+plot(g3, pages = 1)
+```
+
+![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+``` r
+ychap <- predict(g3, newdata = merged_iq_train, type = "response")
+plot(merged_iq_train$total_cases, type='l')
+lines(ychap,col='red')
+```
+
+![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-2.png)<!-- -->
+
 ### Regression Tree
 
 In this section, we look at Regression tree, a simple method that
@@ -334,10 +486,13 @@ library(vip) # for feature importance
 We first look at Iquitos:
 
 ``` r
+# remove the results = 'hide' to see all the graphs for all the models in the Cross Validation.
 iq_mae <- c()
 for (iq_plan in iq_plans){
-  iq_train <- merged_iq_train %>% slice(iq_plan[1]:iq_plan[2])
-  iq_test <- merged_iq_train %>% slice(iq_plan[3]:iq_plan[4])
+  iq_train <- merged_iq_train %>% slice(iq_plan[1]:iq_plan[2]) %>%
+      select(-c(year, weekofyear))
+  iq_test <- merged_iq_train %>% slice(iq_plan[3]:iq_plan[4]) %>%
+      select(-c(year, weekofyear))
   tree_iq <- rpart(formula = total_cases ~ ., 
                  data = iq_train,
                  method = "anova")
@@ -354,13 +509,87 @@ for (iq_plan in iq_plans){
 }
 ```
 
-![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-2.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-3.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-4.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-5.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-6.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-7.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-8.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-9.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-10.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-11.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-12.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-13.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-14.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-15.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-16.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-17.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-18.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-19.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-20.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-21.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-22.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-23.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-24.png)<!-- -->
+![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-2.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-3.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-4.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-5.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-6.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-7.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-8.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-9.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-10.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-11.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-12.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-13.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-14.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-15.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-16.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-17.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-18.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-19.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-20.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-21.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-22.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-23.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-14-24.png)<!-- -->
+For San Juan:
+
+``` r
+# remove the results = 'hide' to see all the graphs for all the models in the Cross Validation.
+sj_mae <- c()
+for (sj_plan in sj_plans){
+  sj_train <- merged_sj_train %>% slice(sj_plan[1]:sj_plan[2])
+  sj_test <- merged_sj_train %>% slice(sj_plan[3]:sj_plan[4])
+  tree_sj <- rpart(formula = total_cases ~ ., 
+                 data = sj_train,
+                 method = "anova")
+  rpart.plot(tree_sj)
+  ychap.tree_sj <- predict(tree_sj, newdata = sj_train)
+  plot(sj_train$total_cases, type='l')
+  lines(ychap.tree_sj,col='red')
+  ychap.tree_sj <- predict(tree_sj, newdata = sj_test)
+  mae(sj_test$total_cases, ychap.tree_sj)
+  sj_mae <- append(sj_mae, mae(sj_test$total_cases, ychap.tree_sj))
+  plot(sj_test$total_cases, type='l')
+  lines(ychap.tree_sj,col='red')
+  print(vip(tree_sj, num_features = 10, bar = FALSE)) # return the importance of the features
+}
+```
+
+![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-2.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-3.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-4.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-5.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-6.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-7.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-8.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-9.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-10.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-11.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-12.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-13.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-14.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-15.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-16.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-17.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-18.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-19.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-20.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-21.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-22.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-23.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-24.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-25.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-26.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-27.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-28.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-29.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-30.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-31.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-32.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-33.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-34.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-35.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-36.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-37.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-38.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-39.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-15-40.png)<!-- -->
 
 ``` r
 mean(iq_mae)
 ```
 
-    ## [1] 7.763333
+    ## [1] 11.13833
+
+``` r
+mean(sj_mae)
+```
+
+    ## [1] 28.181
+
+#### Conclusion:
+
+##### For Iquitos:
+
+-   The Cross Validation mean MAE score for Iquitos is 7.76.
+-   Going through different models in CV, we collect the important
+    features to predict the number of cases:
+    -   forest_area_sq_km  
+    -   reanalysis_min_air_temp_k  
+    -   reanalysis_specific_humidity_g\_per_kg  
+    -   reanalysis_dew_point_temp_k  
+    -   reanalysis_precip_amt_kg_per_m2  
+    -   ndvi_nw  
+    -   station_avg_temp_c  
+    -   station_max_temp_c  
+    -   population_total  
+    -   population_density_people_per_sq_km_of_land_area  
+    -   population_ages_0\_9_percent  
+    -   population_ages_10_20_percent  
+    -   gdp_current_us  
+    -   employment_to_population_average
+
+##### For San Juan:
+
+-   The Cross Validation mean MAE score for San Juan is 28.181
+-   Going through different models in CV, we collect the important
+    features to predict the number of cases:
+    -   ndvi_se  
+    -   ndvi_nw  
+    -   ndvi_sw  
+    -   reanalysis_dew_point_temp_k  
+    -   reanalysis_specific_humidity_g\_per_kg  
+    -   renalysis_max_air_temp_k  
+    -   forest_area_sq_km  
+    -   population_total  
+    -   population_density_people_per_sq_km_of_land_area
+    -   population_ages_0\_9_percent  
+    -   gdp_current_us  
+    -   employment_to_population_average
+
+We should remark that Regression Tree minimizes the residual sum of
+squares error and we are looking at min MAE error.
 
 ### Random Forest
 
