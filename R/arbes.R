@@ -24,9 +24,9 @@ getwd()
 load("rdas/merged_iq_train.rda")
 names(merged_iq_train)
 head(merged_iq_train)
-load("rdas/merged_iq_train.rda")
-names(merged_iq_train)
-head(merged_iq_train)
+load("rdas/merged_sj_train.rda")
+names(merged_sj_train)
+head(merged_sj_train)
 #### adding the periodicity of 2 years variable
 w <- 2*pi/36
 Time <- 1:nrow(merged_iq_train)
@@ -62,6 +62,17 @@ summary(tree_iq)
 plot(tree_iq)
 text(tree_iq, pretty = 0)
 ychap.tree_iq <- predict(tree_iq, newdata = iq_test)
+
+set.seed(123456789) 
+sj_train <- merged_sj_train %>%
+  sample_frac(.7)
+sj_test <- merged_sj_train %>%
+  setdiff(sj_train)
+tree_sj <- tree(total_cases ~., data = sj_train)
+summary(tree_sj)
+plot(tree_sj)
+text(tree_sj, pretty = 0)
+ychap.tree_sj <- predict(tree_sj, newdata = sj_test)
 #The following variables are selected to fit the tree:
 #"reanalysis_specific_humidity_g_per_kg"                                  
 #"forest_area_sq_km"                    

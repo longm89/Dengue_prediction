@@ -97,6 +97,11 @@ plot(g2, pages = 1)
 #"reanalysis_min_air_temp_k"  
 # year
 # weekofyear
+# "ndvi_se"                              
+# "reanalysis_tdtr_k"                   
+# "reanalysis_avg_temp_k"                
+# "reanalysis_relative_humidity_percent"
+# "forest_area_sq_km" 
 g3 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(forest_area_sq_km)
           + s(employment_to_population_average) + s(population_total)
           + s(precipitation_amt_mm) + s(station_min_temp_c) + s(reanalysis_dew_point_temp_k)

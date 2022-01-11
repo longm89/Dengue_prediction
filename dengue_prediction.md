@@ -238,12 +238,13 @@ build_sliding_windows <- function(dataset, train_size, test_size, step_size) {
 Applying to our dataset, we will choose:  
 \* train_size = 60% of the length of the dataset  
 \* test_size = 20 % of the length of the dataset  
-\* step_size = 10
+\* step_size = 20 weeks  
+The procedure then gives 10 and 6 folds for
 
 ``` r
 sj_train_size <- round(nrow(merged_sj_train) * 0.6)
 sj_test_size <- round(nrow(merged_sj_train) * 0.2)
-sj_step_size <- 10
+sj_step_size <- 20
 sj_plans <- build_sliding_windows(merged_sj_train, sj_train_size, sj_test_size, sj_step_size)
 sj_plans
 ```
@@ -252,63 +253,36 @@ sj_plans
     ## [1]   1 562 563 749
     ## 
     ## [[2]]
-    ## [1]  11 572 573 759
-    ## 
-    ## [[3]]
     ## [1]  21 582 583 769
     ## 
-    ## [[4]]
-    ## [1]  31 592 593 779
-    ## 
-    ## [[5]]
+    ## [[3]]
     ## [1]  41 602 603 789
     ## 
-    ## [[6]]
-    ## [1]  51 612 613 799
-    ## 
-    ## [[7]]
+    ## [[4]]
     ## [1]  61 622 623 809
     ## 
-    ## [[8]]
-    ## [1]  71 632 633 819
-    ## 
-    ## [[9]]
+    ## [[5]]
     ## [1]  81 642 643 829
     ## 
-    ## [[10]]
-    ## [1]  91 652 653 839
-    ## 
-    ## [[11]]
+    ## [[6]]
     ## [1] 101 662 663 849
     ## 
-    ## [[12]]
-    ## [1] 111 672 673 859
-    ## 
-    ## [[13]]
+    ## [[7]]
     ## [1] 121 682 683 869
     ## 
-    ## [[14]]
-    ## [1] 131 692 693 879
-    ## 
-    ## [[15]]
+    ## [[8]]
     ## [1] 141 702 703 889
     ## 
-    ## [[16]]
-    ## [1] 151 712 713 899
-    ## 
-    ## [[17]]
+    ## [[9]]
     ## [1] 161 722 723 909
     ## 
-    ## [[18]]
-    ## [1] 171 732 733 919
-    ## 
-    ## [[19]]
+    ## [[10]]
     ## [1] 181 742 743 929
 
 ``` r
 iq_train_size <- round(nrow(merged_iq_train) * 0.6)
 iq_test_size <- round(nrow(merged_iq_train) * 0.2)
-iq_step_size <- 10
+iq_step_size <- 20
 iq_plans <- build_sliding_windows(merged_iq_train, iq_train_size, iq_test_size, iq_step_size)
 iq_plans
 ```
@@ -317,34 +291,28 @@ iq_plans
     ## [1]   1 312 313 416
     ## 
     ## [[2]]
-    ## [1]  11 322 323 426
-    ## 
-    ## [[3]]
     ## [1]  21 332 333 436
     ## 
-    ## [[4]]
-    ## [1]  31 342 343 446
-    ## 
-    ## [[5]]
+    ## [[3]]
     ## [1]  41 352 353 456
     ## 
-    ## [[6]]
-    ## [1]  51 362 363 466
-    ## 
-    ## [[7]]
+    ## [[4]]
     ## [1]  61 372 373 476
     ## 
-    ## [[8]]
-    ## [1]  71 382 383 486
-    ## 
-    ## [[9]]
+    ## [[5]]
     ## [1]  81 392 393 496
     ## 
-    ## [[10]]
-    ## [1]  91 402 403 506
-    ## 
-    ## [[11]]
+    ## [[6]]
     ## [1] 101 412 413 516
+
+We will use this procedure to evaluate different models later.
+
+``` r
+mae<-function(y, ychap)
+{
+  return(round(mean(abs(y-ychap)), digit = 2))
+}
+```
 
 ### Generalized Linear Models with Negative Binomial Distribution family.
 
@@ -352,9 +320,47 @@ iq_plans
 
 ### Regression Tree
 
-In this session, we look at Regression tree, a simple method that
-doesn’t require any assumption on the distribution of the variables. It
-gives a simple method to choose the variables.
+In this section, we look at Regression tree, a simple method that
+doesn’t require any assumption on the distribution of the variables, and
+moreover, gives a way to select variables.
+
+``` r
+library(rpart)
+library(tree)
+library(rpart.plot)
+library(vip) # for feature importance
+```
+
+We first look at Iquitos:
+
+``` r
+iq_mae <- c()
+for (iq_plan in iq_plans){
+  iq_train <- merged_iq_train %>% slice(iq_plan[1]:iq_plan[2])
+  iq_test <- merged_iq_train %>% slice(iq_plan[3]:iq_plan[4])
+  tree_iq <- rpart(formula = total_cases ~ ., 
+                 data = iq_train,
+                 method = "anova")
+  rpart.plot(tree_iq)
+  ychap.tree_iq <- predict(tree_iq, newdata = iq_train)
+  plot(iq_train$total_cases, type='l')
+  lines(ychap.tree_iq,col='red')
+  ychap.tree_iq <- predict(tree_iq, newdata = iq_test)
+  mae(iq_test$total_cases, ychap.tree_iq)
+  iq_mae <- append(iq_mae, mae(iq_test$total_cases, ychap.tree_iq))
+  plot(iq_test$total_cases, type='l')
+  lines(ychap.tree_iq,col='red')
+  print(vip(tree_iq, num_features = 10, bar = FALSE)) # return the importance of the features
+}
+```
+
+![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-2.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-3.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-4.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-5.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-6.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-7.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-8.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-9.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-10.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-11.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-12.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-13.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-14.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-15.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-16.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-17.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-18.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-19.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-20.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-21.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-22.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-23.png)<!-- -->![](dengue_prediction_files/figure-gfm/unnamed-chunk-12-24.png)<!-- -->
+
+``` r
+mean(iq_mae)
+```
+
+    ## [1] 7.763333
 
 ### Random Forest
 
