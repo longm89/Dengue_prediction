@@ -1,7 +1,7 @@
 ---
 title: "Dengue Forecasting"
 author: "Axel Forveille, MAI Tien Long"
-output: github_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -10,6 +10,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r echo=FALSE, message=FALSE}
 ##### Start an R session and import the library
 rm(list=objects())
+```
+```{r echo = FALSE, message = FALSE}
+# import the library
+library(ggplot2)
+library(corrplot)
+library(dplyr)
+library(lubridate)
+library(scales)
+library(gridExtra)
+library(ggthemes)
+library(tidyquant)
+library(forecast)
+library(TSA) # for plotting periodogram
 ```
 ## Introduction 
 The purpose of the project is to predict the number of dengue cases in two cities, San Juan and Iquitos for each week, using environmental and climate variables. The challenge was organized in 2015 by several departments in the U.S. Federal Government (Department of Health and Human Services, Department of Defense, Department of Commerce, and the Department of Homeland Security), with the support of the Pandemic Prediction and Forecasting Science and Technology Interagency Working Group under the National Science and Technology Council (https://dengueforecasting.noaa.gov/).
@@ -37,8 +50,9 @@ Another data that can affect the spread of the disease is the number of migratio
 
 #### Methods
 
-##### Generalized Linear Models with the Negative Binomial Distribution family
+##### Linear Regression
 
+##### Generalized Linear Models with the Negative Binomial Distribution family
 
 ##### Model GAM 
 
@@ -46,9 +60,11 @@ Another data that can affect the spread of the disease is the number of migratio
 
 ##### Random Forest
 
-##### Times Series
+##### Times Series (ARIMA and SARIMA)
 
 ##### Gradient Boosting
+
+##### Expert Aggregation
 
 ## Data Wrangling and Exploration 
 #### Data Wrangling   
@@ -56,7 +72,8 @@ Another data that can affect the spread of the disease is the number of migratio
 The data for each city consists of:   
 
 * Time indicators:     
-  + week_start_date         
+  + week_start_date  
+  + weekofyear
   + year
 * NOAA's GHCN daily climate data weather station measurements.     
   + station_max_temp_c - maximum temperature          
@@ -95,46 +112,59 @@ We download the data from WorldBank, clean and select important variables that m
 * employment_to_population_average      
 * Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+
 
-We see that all the explicable variables make sense. We can group them into the following groups:
+We see that all the explicable variables make sense. We can group them into the following groups:       
+* Time of the year 
 * Climate variables       
-* Time of the year     
 * Total population       
 * Population density       
 * Population age      
 * Economical condition   
 There are several variables from climate variables correlate with each other. 
 
-#### Data Exploration   
-```{r echo = FALSE, message = FALSE}
-# import the library
-library(ggplot2)
-library(corrplot)
-library(dplyr)
-library(lubridate)
-library(scales)
-library(gridExtra)
-library(ggthemes)
-```
-For each city, we have the following variables:
 ```{r}
 
 # import the cleaned data
 load("rdas/merged_iq_train.rda")
 load("rdas/merged_sj_train.rda")
-names(merged_iq_train)
 ```
+##### Features engineering        
+In later sections, we will apply classical machine learning models such that Generalized Linear Model and Generalized Additive Model. As the number of cases is a time series: the number of cases of a week is highly influenced by the number of cases of the previous week, in order to have independent residual errors, we will add lag variables to reduce their auto-correlation. Our model will be able to use the number of cases from the past weeks to predict the number of cases of the current week. 
+```{r}
+#For Iquitos, we add the lagging variables by 1 week, 3 weeks, 5 weeks
+merged_iq_train <- merged_iq_train %>%
+  mutate(lag_1_total_cases = lag(total_cases))
+merged_iq_train[1, "lag_1_total_cases"] = 0
+merged_iq_train <- merged_iq_train %>%
+  mutate(lag_3_total_cases = lag(lag(lag_1_total_cases)))
+merged_iq_train[1:3, "lag_3_total_cases"] = 0
+merged_iq_train <- merged_iq_train %>%
+  mutate(lag_4_total_cases = lag(lag_3_total_cases))
+merged_iq_train[1:4, "lag_4_total_cases"] = 0
+merged_iq_train <- merged_iq_train %>%
+  mutate(lag_5_total_cases = lag(lag(lag_3_total_cases)))
+merged_iq_train[1:5, "lag_5_total_cases"] = 0
+```
+We add a dummy variable Time term to model trend in the data over time. 
+```{r}
+# We add the Time term 
+merged_iq_train$Time <- seq.int(nrow(merged_iq_train))
+```
+
+
+#### Data Exploration   
+
 
 ##### Visualising the number of cases over the year:
 ```{r echo = FALSE, message = FALSE}
-######## Drawing the two time series
-# for Iquitos
+######## For Iquitos
 # Define Start and end times for the subset as R objects that are the time class
 startTime_iq <- as.Date("2001-01-01")
-endTime_iq <- as.Date("2010-01-01")
+endTime_iq <- as.Date("2009-12-24")
 # create a start and end time R object
 limits_iq <- c(startTime_iq, endTime_iq)
 iq_weekly_cases <- ggplot(merged_iq_train, aes(week_start_date, total_cases)) +
   geom_line(na.rm=TRUE) + 
+  geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
   ggtitle("Total number of cases from 2001 - 2010 in Iquitos") +
   xlab("Date") + ylab("Total number of cases")
 # format x-axis: dates
@@ -142,10 +172,18 @@ iq_weekly_cases_time_series <- iq_weekly_cases +
   (scale_x_date(limits = limits_iq,
                 breaks = date_breaks("1 year"),
                 labels = date_format("%b %y")))
-
 iq_weekly_cases_time_series
 
-# for San Juan
+# looking for seasonality over the week of the year
+merged_iq_train %>% filter("2001" <= year & year <= "2009") %>% 
+  ggplot(aes(x = weekofyear, y = total_cases, color = factor(year))) +
+  geom_line()
+
+acf(merged_iq_train$total_cases, lag.max = 52 * 3)
+```
+
+```{r echo = FALSE, message = FALSE}
+# For San Juan
 # create a start and end time R object
 startTime_sj <- as.Date("1990-04-30")
 endTime_sj <- as.Date("2000-04-22")
@@ -153,6 +191,7 @@ endTime_sj <- as.Date("2000-04-22")
 limits_sj <- c(startTime_sj, endTime_sj)
 sj_weekly_cases <- ggplot(merged_sj_train, aes(week_start_date, total_cases)) +
   geom_line(na.rm=TRUE) + 
+  geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
   ggtitle("Total number of cases from 1990 - 2008 in San Juan") +
   xlab("Date") + ylab("Total number of cases")
 # format x-axis: dates
@@ -163,7 +202,11 @@ sj_weekly_cases_time_series <- sj_weekly_cases +
 
 sj_weekly_cases_time_series
 
-
+# look for seasonality, depending on the week of the year
+merged_sj_train %>% filter("1991" <= year & year <= "1999") %>% 
+  ggplot(aes(x = weekofyear, y = total_cases, color = factor(year))) +
+  geom_line()
+acf(merged_sj_train$total_cases, lag.max = 52*3)
 ```
 ```{r}
 # draw the two histograms
@@ -189,61 +232,28 @@ Some observations:
 * There are the peaks that we would like to predict. They happen in what months? Are there periods or seasonality trends?       
 * The number of cases for both cities do not follow Gaussian distributions. It suggests that we should use Generalized Linear Model, as described in Simon N. Wood's book: Generalized Additive Models. The number of cases are natural numbers, we will assume that they follow Poisson distribution or Negative Binomial distribution, and in particular Negative Binomial distribution as the mean is much smaller than the variance. In fact, the Poisson distribution can be interpreted as a special case of the Negative Binomial distribution when the parameter $r \rightarrow \infty$ and is used as a way to model an over-dispersed Poisson distribution.
 
+
+
 ## Modeling and Prediction
 ### Preparing the data for training and testing
-A simple method for training and evaluating the models, simple validation, is to split the data into training set and testing set. As our data is time series, instead of a random split, we should split our time series with respect to chronology, so that we could train our models on the past data, and test the predictions on the future. To improve consistency, we will use instead an analogue of cross validation for time series, called sliding windows. 
-```{r fig.align = 'center', out.width = "50%", fig.cap = "The Sliding Windows method, the picture is taken from Uber's Engineering blog: https://eng.uber.com/omphalos/"}
-knitr::include_graphics(here::here("", "figs/sliding_windows_method.png"))
-```
-To implement the method, we will choose the length of the training set train_size, the length of the test set test_size, and the step_size that we will move. The step_size corresponds to the length of the dropped part in Pass 2 in the picture. We implement the function below to build a list of (start_train, end_train, start_test, end_test) to train and evaluate the models.
-```{r}
-# The following function implements the Sliding windows method, 
-# an analogue of Cross Validation for Time Series
-# The following function receives an input of train_size, test_size, step_size 
-# and returns a list of vectors of 4 parameters:
-# (start_train, end_train, start_test, end_test)
+In the following, we will split the data into a training set and a testing set. As our data is time series, instead of a random selection of each set, we split our time series with respect to chronology, in order to train our models on the past data, and test the predictions on the future. 
 
-build_sliding_windows <- function(dataset, train_size, test_size, step_size) {
-  start_train <- 1 
-  end_train <- start_train + train_size - 1
-  start_test <- end_train + 1
-  end_test <- start_test + test_size - 1
-  
-  plans <- list()
-  while (end_test < nrow(dataset)) {
-    plans_length = length(plans)
-    plans[[plans_length + 1]] <- c(start_train, end_train, start_test, end_test)
-    
-    start_train <- start_train + step_size
-    end_train <- start_train + train_size - 1
-    start_test <- end_train + 1
-    end_test <- start_test + test_size - 1
-  }
-  plans
-}
-```
-Applying to our dataset, we will choose:          
-* train_size = 60% of the length of the dataset       
-* test_size = 20 % of the length of the dataset          
-* step_size = 20 weeks      
-The procedure then gives 10 and 6 folds for San Juan and Iquitos.
 ```{r}
-sj_train_size <- round(nrow(merged_sj_train) * 0.6)
-sj_test_size <- round(nrow(merged_sj_train) * 0.2)
-sj_step_size <- 20
-sj_plans <- build_sliding_windows(merged_sj_train, sj_train_size, sj_test_size, sj_step_size)
-sj_plans
+# For Iquitos
+iq_train_size <- round(nrow(merged_iq_train) * 0.8)
+iq_train <- merged_iq_train %>% slice(1: iq_train_size)
+iq_test <- merged_iq_train %>% slice(iq_train_size + 1: nrow(merged_iq_train))
+
+
+# For San Juan
+
+sj_train_size <- round(nrow(merged_sj_train) * 0.8)
+sj_train <- merged_sj_train %>% slice(1: sj_train_size)
+sj_test <- merged_sj_train %>% slice(sj_train_size + 1: nrow(merged_sj_train))
 
 ```
-```{r}
-iq_train_size <- round(nrow(merged_iq_train) * 0.6)
-iq_test_size <- round(nrow(merged_iq_train) * 0.2)
-iq_step_size <- 20
-iq_plans <- build_sliding_windows(merged_iq_train, iq_train_size, iq_test_size, iq_step_size)
-iq_plans
 
-```
-We will use this procedure to evaluate different models later.
+We will use MAE score to evaluate different models.
 ```{r}
 mae<-function(y, ychap)
 {
@@ -259,36 +269,114 @@ library(mgcv)
 library(tidymv)
 library(mgcViz)
 ```
+In the following, we fit GAM models using temperature features, the population feature and moreover, Time, weekofyear to model trend and seasonality. After that, we look at another model, this time adding auto-regressive features such as lag variables.
 For Iquitos: 
-
 ```{r}
-iq_mae <- c()
-for (iq_plan in iq_plans){
-  iq_train <- merged_iq_train %>% slice(iq_plan[1]:iq_plan[2]) %>%
-      select(-c(year, weekofyear))
-  iq_test <- merged_iq_train %>% slice(iq_plan[3]:iq_plan[4]) %>%
-      select(-c(year, weekofyear))
-  g3 <- gam(total_cases ~ s(forest_area_sq_km) + s(reanalysis_min_air_temp_k) + s(reanalysis_specific_humidity_g_per_kg)        
-  + s(reanalysis_dew_point_temp_k) 
+g0 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw) + s(reanalysis_air_temp_k)
   + s(population_total) 
-  + s(population_density_people_per_sq_km_of_land_area)   
-  + s(population_ages_0_9_percent)        
-  + s(population_ages_10_20_percent)  
-  + s(gdp_current_us)   
-  + s(employment_to_population_average), 
-          SELECT = TRUE,family = nb(), data = merged_iq_train, method="REML")
-  summary(g3)
-  plot(g3, pages = 1)
-  ychap <- predict(g3, newdata = iq_test, type = "response")
-  mae(iq_test$total_cases, ychap)
-  iq_mae <- append(iq_mae, mae(iq_test$total_cases, ychap))
-  plot(iq_test$total_cases, type='l')
-  lines(ychap,col='red')
-}
-mean(iq_mae)
+  ,family = nb(), data = iq_train, method = "REML", select = TRUE)
+#gam.check(g0)
+summary(g0)
+#plot.gam(g0)
+
+
+# on train set
+ychap <- predict(g0, newdata = iq_train, type = "response")
+plot(iq_train$total_cases, type='l')
+lines(ychap,col='red')
+
+startTime_iq <- as.Date("2001-01-01")
+endTime_iq <- as.Date("2009-12-24")
+# create a start and end time R object
+limits_iq <- c(startTime_iq, endTime_iq)
+iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - ychap)) +
+  geom_line(na.rm=TRUE) + 
+  geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
+  ggtitle("Residuals from 2001 - 2010 in Iquitos") +
+  xlab("Date") + ylab("Total number of cases")
+iq_weekly_cases
+# on test set
+ychap <- predict(g0, newdata = iq_test, type = "response")
+mae(iq_test$total_cases, ychap)
+plot(iq_test$total_cases, type='l')
+lines(ychap,col='red')
+
 ```
 
+```{r}
+g1 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
+  + s(population_total) 
+  + s(Time) + s(weekofyear, bs = 'cc', k = 52) 
 
+  ,family = nb(), data = iq_train, method = "REML", select = TRUE)
+#gam.check(g1)
+summary(g1)
+#plot.gam(g1)
+
+
+# on train set
+train_ychap <- predict(g1, newdata = iq_train, type = "response")
+plot(iq_train$total_cases, type='l')
+lines(train_ychap,col='red')
+# look at ACF and PACF of residuals to see if there's auto-correlation
+
+acf(iq_train$total_cases - train_ychap)
+pacf(iq_train$total_cases - train_ychap)
+startTime_iq <- as.Date("2001-01-01")
+endTime_iq <- as.Date("2009-12-24")
+# create a start and end time R object
+limits_iq <- c(startTime_iq, endTime_iq)
+iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - train_ychap)) +
+  geom_line(na.rm=TRUE) + 
+  geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
+  ggtitle("Residuals from 2001 - 2010 in Iquitos") +
+  xlab("Date") + ylab("Total number of cases")
+iq_weekly_cases
+# on test set
+test_ychap <- predict(g1, newdata = iq_test, type = "response")
+mae(iq_test$total_cases, test_ychap)
+plot(iq_test$total_cases, type='l')
+lines(test_ychap,col='red')
+
+```
+
+```{r}
+g2 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
+  + s(population_total) 
+  + s(Time) + s(weekofyear, bs = 'cc', k = 52) 
+  + s(log(lag_1_total_cases+1)) + s(log(lag_3_total_cases+1))
+  ,family = nb(), data = iq_train, method = "REML")
+#gam.check(g2)
+summary(g2)
+#plot.gam(g2)
+
+
+# on train set
+train_ychap <- predict(g2, newdata = iq_train, type = "response")
+plot(iq_train$total_cases, type='l')
+lines(train_ychap, col='red')
+# look at ACF and PACF of residuals to see if there's auto-correlation
+
+acf(iq_train$total_cases - train_ychap)
+pacf(iq_train$total_cases - train_ychap)
+
+startTime_iq <- as.Date("2001-01-01")
+endTime_iq <- as.Date("2009-12-24")
+# create a start and end time R object
+limits_iq <- c(startTime_iq, endTime_iq)
+iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - train_ychap)) +
+  geom_line(na.rm=TRUE) + 
+  geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
+  ggtitle("Residuals from 2001 - 2010 in Iquitos") +
+  xlab("Date") + ylab("Total number of cases")
+iq_weekly_cases
+# on test set
+test_ychap <- predict(g2, newdata = iq_test, type = "response")
+mae(iq_test$total_cases, test_ychap)
+plot(iq_test$total_cases, type='l')
+lines(test_ychap,col='red')
+
+```
 
 ### Regression Tree 
 In this section, we look at Regression tree, a simple method that doesn't require any assumption on the distribution of the variables, and moreover, gives a way to select variables.
@@ -300,105 +388,55 @@ library(vip) # for feature importance
 ```
 We first look at Iquitos:
 
-```{r echo = TRUE, MESSAGE = FALSE, results='hide'}
-# remove the results = 'hide' to see all the graphs for all the models in the Cross Validation.
-iq_mae <- c()
-for (iq_plan in iq_plans){
-  iq_train <- merged_iq_train %>% slice(iq_plan[1]:iq_plan[2]) %>%
-      select(-c(year, weekofyear))
-  iq_test <- merged_iq_train %>% slice(iq_plan[3]:iq_plan[4]) %>%
-      select(-c(year, weekofyear))
-  tree_iq <- rpart(formula = total_cases ~ ., 
+```{r echo = TRUE, MESSAGE = FALSE}
+
+tree_iq <- rpart(formula = total_cases ~ ., 
                  data = iq_train,
                  method = "anova")
-  rpart.plot(tree_iq)
-  ychap.tree_iq <- predict(tree_iq, newdata = iq_train)
-  plot(iq_train$total_cases, type='l')
-  lines(ychap.tree_iq,col='red')
-  ychap.tree_iq <- predict(tree_iq, newdata = iq_test)
-  mae(iq_test$total_cases, ychap.tree_iq)
-  iq_mae <- append(iq_mae, mae(iq_test$total_cases, ychap.tree_iq))
-  plot(iq_test$total_cases, type='l')
-  lines(ychap.tree_iq,col='red')
-  print(vip(tree_iq, num_features = 10, bar = FALSE)) # return the importance of the features
-}
-
+rpart.plot(tree_iq)
+ychap.tree_iq <- predict(tree_iq, newdata = iq_train)
+plot(iq_train$total_cases, type='l')
+lines(ychap.tree_iq,col='red')
+ychap.tree_iq <- predict(tree_iq, newdata = iq_test)
+mae(iq_test$total_cases, ychap.tree_iq)
+plot(iq_test$total_cases, type='l')
+lines(ychap.tree_iq,col='red')
+print(vip(tree_iq, num_features = 10, bar = FALSE)) # return the importance of the features
 ```
 For San Juan:      
 ```{r echo = TRUE, MESSAGE = FALSE, results='hide'}
 # remove the results = 'hide' to see all the graphs for all the models in the Cross Validation.
-sj_mae <- c()
-for (sj_plan in sj_plans){
-  sj_train <- merged_sj_train %>% slice(sj_plan[1]:sj_plan[2]) %>%
-      select(-c(year, weekofyear))
-  sj_test <- merged_sj_train %>% slice(sj_plan[3]:sj_plan[4]) %>%
-      select(-c(year, weekofyear))
-  tree_sj <- rpart(formula = total_cases ~ ., 
+tree_sj <- rpart(formula = total_cases ~ ., 
                  data = sj_train,
                  method = "anova")
-  rpart.plot(tree_sj)
-  ychap.tree_sj <- predict(tree_sj, newdata = sj_train)
-  plot(sj_train$total_cases, type='l')
-  lines(ychap.tree_sj,col='red')
-  ychap.tree_sj <- predict(tree_sj, newdata = sj_test)
-  mae(sj_test$total_cases, ychap.tree_sj)
-  sj_mae <- append(sj_mae, mae(sj_test$total_cases, ychap.tree_sj))
-  plot(sj_test$total_cases, type='l')
-  lines(ychap.tree_sj,col='red')
-  print(vip(tree_sj, num_features = 10, bar = FALSE)) # return the importance of the features
-}
+rpart.plot(tree_sj)
+ychap.tree_sj <- predict(tree_sj, newdata = sj_train)
+plot(sj_train$total_cases, type='l')
+lines(ychap.tree_sj,col='red')
+ychap.tree_sj <- predict(tree_sj, newdata = sj_test)
+mae(sj_test$total_cases, ychap.tree_sj)
+plot(sj_test$total_cases, type='l')
+lines(ychap.tree_sj,col='red')
+print(vip(tree_sj, num_features = 10, bar = FALSE)) # return the importance of the features
 
-```
-```{r}
-mean(iq_mae)
-mean(sj_mae)
 ```
 
 #### Conclusion:
 ##### For Iquitos:       
-* The Cross Validation mean MAE score for Iquitos is 11.13833 
-* Going through different models in CV, we collect the important features to predict the number of cases:       
-  + forest_area_sq_km   
-  + reanalysis_min_air_temp_k      
-  + reanalysis_specific_humidity_g_per_kg       
-  + reanalysis_dew_point_temp_k       
-  + reanalysis_precip_amt_kg_per_m2       
-  + ndvi_nw        
-  + station_avg_temp_c         
-  + station_max_temp_c  
-  + population_total           
-  + population_density_people_per_sq_km_of_land_area   
-  + population_ages_0_9_percent        
-  + population_ages_10_20_percent  
-  + gdp_current_us   
-  + employment_to_population_average 
+
 
 
 ##### For San Juan:     
-* The Cross Validation mean MAE score for San Juan is 28.181 
-* Going through different models in CV, we collect the important features to predict the number of cases: 
-  + ndvi_se       
-  + ndvi_nw     
-  + ndvi_sw       
-  + reanalysis_dew_point_temp_k      
-  + reanalysis_specific_humidity_g_per_kg     
-  + renalysis_max_air_temp_k     
-  + forest_area_sq_km  
-  + population_total  
-  + population_density_people_per_sq_km_of_land_area
-  + population_ages_0_9_percent     
-  + gdp_current_us    
-  + employment_to_population_average
-     
 
-  
-We should remark that Regression Tree minimizes the residual sum of squares error and we are looking at min MAE error.
 
 ### Random Forest
 
-### Times Series (ARIMA/SARIMA)
-
+### Times Series (ARIMA and SARIMA model)
+We first fit an ARIMA model and then a SARIMA model.
+#### ARIMA model
 ### Gradient Boosting
+
+### Expert Aggregation 
 
 ## Conclusion
 

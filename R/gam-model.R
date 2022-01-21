@@ -11,6 +11,8 @@ library(yarrr)
 library(ggplot2)
 library(MASS)
 library(dplyr)
+library(tidyquant)
+library(forecast)
 rmse<-function(eps)
 {
   return(round(sqrt(mean(eps^2,na.rm=TRUE)),digits=0))
@@ -26,151 +28,71 @@ mae<-function(y,ychap)
 ###############Import data
 getwd()
 load("rdas/merged_iq_train.rda")
-names(merged_iq_train)
-head(merged_iq_train)
-# add the lagging variables by 1 week, 2 weeks, 3 weeks
+##### add lag variables of weather data
+
 merged_iq_train <- merged_iq_train %>%
   mutate(lag_1_total_cases = lag(total_cases))
 merged_iq_train[1, "lag_1_total_cases"] = 0
 merged_iq_train <- merged_iq_train %>%
-  mutate(lag_2_total_cases = lag(lag_1_total_cases))
-merged_iq_train[1, "lag_2_total_cases"] = 0
+  mutate(lag_3_total_cases = lag(lag(lag_1_total_cases)))
+merged_iq_train[1:3, "lag_3_total_cases"] = 0
 merged_iq_train <- merged_iq_train %>%
-  mutate(lag_3_total_cases = lag(lag_2_total_cases))
-merged_iq_train[1, "lag_3_total_cases"] = 0
-merged_iq_train <- merged_iq_train %>%
-  mutate(lag_4_total_cases = lag(lag_3_total_cases))
-merged_iq_train[1, "lag_4_total_cases"] = 0
-#### adding the periodicity of 3 years variable
-w <- 2*pi/36
-Time <- 1:nrow(merged_iq_train)
-Nfourier<-36
-for(i in c(1:Nfourier))
-{
-  assign(paste("cos", i, sep=""),cos(w*Time*i))
-  assign(paste("sin", i, sep=""),sin(w*Time*i))
-}
-objects()
+  mutate(lag_5_total_cases = lag(lag(lag_3_total_cases)))
+merged_iq_train[1:5, "lag_5_total_cases"] = 0
 
-plot(cos1,type='l')
-plot(cos10,type='l')
-#####################insertion de la base de fourier dans la data.frame
-
-cos<-paste('cos',c(1:Nfourier),sep="",collapse=",")                         
-sin<-paste('sin',c(1:Nfourier),sep="",collapse=",")
-paste("data.frame(merged_iq_train,",cos,",",sin,")",sep="")
-merged_iq_train <- eval(parse(text=paste("data.frame(merged_iq_train,",cos,",",sin,")",sep="")))
-names(merged_iq_train)
-
+merged_iq_train$Time <- seq.int(nrow(merged_iq_train))
 # split to train and test sets
-set.seed(123456789)
-iq_train <- merged_iq_train %>%
-  sample_frac(.7)
-iq_test <- merged_iq_train %>%
-  setdiff(iq_train)
+iq_train_size <- round(nrow(merged_iq_train) * 0.8)
+iq_train <- merged_iq_train %>% slice(1: iq_train_size)
+iq_test <- merged_iq_train %>% slice(iq_train_size + 1: nrow(merged_iq_train))
+
 
 
 # using negative binomial distribution of total_cases
-g1 <- gam(total_cases ~ s(station_min_temp_c) + s(station_max_temp_c)
-          + s(station_avg_temp_c) + s(station_precip_mm) + s(station_diur_temp_rng_c)
-          , data = iq_train, family = nb())
+g1 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) 
+          + s(population_total) + s(Time) + s(weekofyear, bs = 'cc', k = 52)
+          ,family = nb(), data = iq_train, method = "REML")
+gam.check(g1)
 summary(g1)
-plot(g1, pages = 1)
 
-# adding more variables to g1
-g2 <- gam(total_cases ~ s(station_min_temp_c) + s(station_max_temp_c)
-          + s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k)
-          + s(reanalysis_air_temp_k) + s(reanalysis_relative_humidity_percent),
-          family = nb(), data = iq_train)
+
+# fitting on train set
+train_ychap <- predict(g1, newdata = iq_train, type = "response")
+plot(iq_train$total_cases, type='l')
+lines(train_ychap,col='red')
+
+iq_train$total_cases_residual <- iq_train$total_cases - train_ychap
+pacf(iq_train$total_cases_residual)
+# fitting on test set
+test_ychap <- predict(g1, newdata = iq_test, type = "response")
+mae(iq_test$total_cases, test_ychap)
+plot(iq_test$total_cases, type='l')
+lines(test_ychap,col='red')
+
+startTime_iq <- as.Date("2001-01-01")
+endTime_iq <- as.Date("2009-12-24")
+# create a start and end time R object
+limits_iq <- c(startTime_iq, endTime_iq)
+iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - train_ychap)) +
+  geom_line(na.rm=TRUE) + 
+  geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
+  ggtitle("Total number of cases from 2001 - 2010 in Iquitos") +
+  xlab("Date") + ylab("Total number of cases")
+iq_weekly_cases
+# format x-axis: dates
+g2 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) 
+          + s(population_total) + s(Time, bs = 'cc', k = 10) + s(weekofyear, bs = 'cc', k = 52)
+          ,family = nb(), data = iq_train, method = "REML")
+gam.check(g2)
 summary(g2)
 plot(g2, pages = 1)
+# fitting on train set
+train_ychap <- predict(g2, newdata = iq_train, type = "response")
+plot(iq_train$total_cases, type='l')
+lines(train_ychap,col='red')
 
-# try other variables selected using CART
-#"reanalysis_specific_humidity_g_per_kg"                                  
-#"forest_area_sq_km"                    
-#"employment_to_population_average"      
-#"population_total"                     
-#"precipitation_amt_mm"                  
-#"station_min_temp_c"                   
-#"reanalysis_dew_point_temp_k"           
-#"ndvi_ne"                              
-#"reanalysis_min_air_temp_k"  
-# year
-# weekofyear
-# "ndvi_se"                              
-# "reanalysis_tdtr_k"                   
-# "reanalysis_avg_temp_k"                
-# "reanalysis_relative_humidity_percent"
-# "forest_area_sq_km" 
-g3 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(forest_area_sq_km)
-          + s(employment_to_population_average) + s(population_total)
-          + s(precipitation_amt_mm) + s(station_min_temp_c) + s(reanalysis_dew_point_temp_k)
-          + s(ndvi_ne) + s(reanalysis_min_air_temp_k) + s(year) + s(weekofyear),
-          family = nb(), data = iq_train)
-summary(g3)
-plot(g3, pages = 1)
-ychap <- predict(g3, newdata = iq_test)
-mae(iq_test$total_cases, ychap)
-rmse(iq_test$total_cases - ychap)
+# fitting on test set
+test_ychap <- predict(g2, newdata = iq_test, type = "response")
+mae(iq_test$total_cases, test_ychap)
 plot(iq_test$total_cases, type='l')
-lines(ychap,col='red')
-
-
-# GAM model using the variables from the exploratory analysis
-# year
-# weekofyear
-# population_total
-#  population_density_people_per_sq_km_of_land_area
-# forest_area_sq_km
-# gdp_current_us 
-# employment_to_population_average
-#station_precip_mm
-# station_min_temp_c
-#station_max_temp_c
-# station_diur_temp_rng_c
-# station_avg_temp_c 
-# reanalysis_tdtr_k
-# reanalysis_specific_humidity_g_per_kg 
-g5 <- gam(total_cases ~  s(year)
-          + s(weekofyear) + s(population_total)
-          + s(population_density_people_per_sq_km_of_land_area) + s(forest_area_sq_km) 
-          + s(gdp_current_us) + s(employment_to_population_average)
-          + s(station_precip_mm) + s(station_min_temp_c)
-          + s(station_max_temp_c) + s(station_diur_temp_rng_c) + s(station_avg_temp_c)
-          + s(reanalysis_tdtr_k) + s(reanalysis_specific_humidity_g_per_kg),
-          family = nb(), data = iq_train)
-summary(g5)
-par(mar = rep(2, 4))
-plot(g5)
-ychap_test <- predict(g5, newdata = iq_test)
-ychap_train <- predict(g5, newdata = iq_train)
-mae(iq_test$total_cases, ychap_test)
-rmse(iq_test$total_cases - ychap_test)
-par(mfrow = c(2,1))
-plot(iq_test$total_cases, type = 'l')
-lines(ychap_test,col='red')
-plot(iq_train$total_cases, type = "l")
-lines(ychap_train,col='green')
-# GAM model, adding cos_1, cos33 and cos_35 to model 5
-g6 <- gam(total_cases ~  s(year)
-          + s(weekofyear) + s(population_total)
-          + s(population_density_people_per_sq_km_of_land_area) + s(forest_area_sq_km) 
-          + s(gdp_current_us) + s(employment_to_population_average)
-          + s(station_precip_mm) + s(station_min_temp_c)
-          + s(station_max_temp_c) + s(station_diur_temp_rng_c) + s(station_avg_temp_c)
-          + s(reanalysis_tdtr_k) + s(reanalysis_specific_humidity_g_per_kg)
-          + s(cos1) + s(cos33) + s(cos35),
-          family = nb(), data = iq_train)
-summary(g6)
-par(mar = rep(2, 4))
-plot(g6)
-ychap_test <- predict(g6, newdata = iq_test)
-ychap_train <- predict(g6, newdata = iq_train)
-mae(iq_test$total_cases, ychap_test)
-rmse(iq_test$total_cases - ychap_test)
-par(mfrow = c(2,1))
-plot(iq_test$total_cases, type = 'l')
-lines(ychap_test,col='red')
-plot(iq_train$total_cases, type = "l")
-lines(ychap_train,col='green')
-##### Look at the interactions in linear models
+lines(test_ychap,col='red')
