@@ -271,44 +271,13 @@ library(mgcViz)
 ```
 In the following, we fit GAM models using temperature features, the population feature and moreover, Time, weekofyear to model trend and seasonality. After that, we look at another model, this time adding auto-regressive features such as lag variables.
 For Iquitos: 
-```{r}
-g0 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw) + s(reanalysis_air_temp_k)
-  + s(population_total) 
-  ,family = nb(), data = iq_train, method = "REML", select = TRUE)
-#gam.check(g0)
-summary(g0)
-#plot.gam(g0)
-
-
-# on train set
-ychap <- predict(g0, newdata = iq_train, type = "response")
-plot(iq_train$total_cases, type='l')
-lines(ychap,col='red')
-
-startTime_iq <- as.Date("2001-01-01")
-endTime_iq <- as.Date("2009-12-24")
-# create a start and end time R object
-limits_iq <- c(startTime_iq, endTime_iq)
-iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - ychap)) +
-  geom_line(na.rm=TRUE) + 
-  geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
-  ggtitle("Residuals from 2001 - 2010 in Iquitos") +
-  xlab("Date") + ylab("Total number of cases")
-iq_weekly_cases
-# on test set
-ychap <- predict(g0, newdata = iq_test, type = "response")
-mae(iq_test$total_cases, ychap)
-plot(iq_test$total_cases, type='l')
-lines(ychap,col='red')
-
-```
 
 ```{r}
 g1 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
   + s(population_total) 
-  + s(Time) + s(weekofyear, bs = 'cc', k = 52) 
+  + s(Time) + s(weekofyear) 
 
-  ,family = nb(), data = iq_train, method = "REML", select = TRUE)
+  ,family = nb(), data = iq_train, method = "REML")
 #gam.check(g1)
 summary(g1)
 #plot.gam(g1)
@@ -343,7 +312,7 @@ lines(test_ychap,col='red')
 ```{r}
 g2 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
   + s(population_total) 
-  + s(Time) + s(weekofyear, bs = 'cc', k = 52) 
+  + s(Time) + s(weekofyear) 
   + s(log(lag_1_total_cases+1)) + s(log(lag_3_total_cases+1))
   ,family = nb(), data = iq_train, method = "REML")
 #gam.check(g2)
@@ -421,19 +390,90 @@ print(vip(tree_sj, num_features = 10, bar = FALSE)) # return the importance of t
 
 ```
 
-#### Conclusion:
-##### For Iquitos:       
+
+### Random Forest            
 
 
+### Times Series (ARIMA model)      
+#### ARIMA model     
+```{r message = FALSE}
+library(forecast)
+library(RColorBrewer)
+library(magrittr)
+library(dplyr)
+library(geoR)
+```
+```{r}
 
-##### For San Juan:     
+# Two-parameter Box-Cox transform 
+boxcox.transform <- function(x, lambda1, lambda2) {
+  if (lambda1!=0) {
+    return(((x + lambda2) ^ lambda1 - 1) / lambda1)
+  } else {
+    return(log(x + lambda2))
+  }
+}
+
+# Two-parameter inverse Box-Cox function
+boxcox.inv <- function(x, lambda1, lambda2) {
+  if (lambda1!=0) {
+    return((lambda1 * x + 1) ^ (1 / lambda1) - lambda2)
+  } else {
+    return(exp(x) - lambda2)
+  }
+}
+```
+```{r}
+#####################################################################
+#######################time series: SARIMA model
+#####################################################################
+
+ts<-ts(iq_train$total_cases, frequency=1) 
+par(mfrow=c(1,2))
+plot(ts)
+plot(diff(ts)) # there's a problem with the variance, the series is not stationary
+lambda_estimates <- boxcoxfit(ts, lambda2 = TRUE) # use boxcox transformation, with 2 lambdas, 
+# because the series contains 0
+lambda1 <- lambda_estimates$lambda[1]
+lambda2 <- lambda_estimates$lambda[2]
+
+ts_with_box_cox_transform <- boxcox.transform(ts, lambda1, lambda2)
+par(mfrow=c(1,3))
+plot(ts_with_box_cox_transform)
+acf(ts_with_box_cox_transform, lag.max = 52*3) # ACF slowly decreases, need to take diff
+pacf(ts_with_box_cox_transform, lag.max = 52*3)
+
+par(mfrow=c(1,3))
+
+plot(diff(ts_with_box_cox_transform))
+acf(diff(ts_with_box_cox_transform), lag.max = 52*3)
+pacf(diff(ts_with_box_cox_transform), lag.max = 52*3)
+
+#Pmax=0
+#Qmax=0
+
+par(mfrow=c(1,2))
+a1 <- acf(diff(ts_with_box_cox_transform), lag.max = 52)
+b1 <- pacf(diff(ts_with_box_cox_transform), lag.max = 52)
+
+###pmax= 3 ou 24
+###qmax= 1
+
+fit1 <- Arima(ts_with_box_cox_transform, order = c(3,1,1))
+
+ts_forecast_boxcox <- boxcox.transform(ts(merged_iq_train$total_cases,  frequency=1), lambda1, lambda2)
+refit <- Arima(ts_forecast_boxcox, model=fit1)
+prevARIMA1_with_boxcox_transform <- tail(refit$fitted, nrow(iq_test)) %>% as.numeric
+predict_ARIMA1 <- boxcox.inv(prevARIMA1_with_boxcox_transform, lambda1, lambda2)
+mae(iq_test$total_cases, predict_ARIMA1)
 
 
-### Random Forest
+par(mfrow=c(1,1))
+plot(iq_test$total_cases,type='l')
+lines(predict_ARIMA1, col='red')
 
-### Times Series (ARIMA and SARIMA model)
-We first fit an ARIMA model and then a SARIMA model.
-#### ARIMA model
+```
+
 ### Gradient Boosting
 
 ### Expert Aggregation 

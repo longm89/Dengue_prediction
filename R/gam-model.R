@@ -13,11 +13,6 @@ library(MASS)
 library(dplyr)
 library(tidyquant)
 library(forecast)
-rmse<-function(eps)
-{
-  return(round(sqrt(mean(eps^2,na.rm=TRUE)),digits=0))
-}
-
 # mean of absolute value of errors
 mae<-function(y,ychap)
 {
