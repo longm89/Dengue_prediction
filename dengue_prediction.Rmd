@@ -130,7 +130,7 @@ load("rdas/merged_sj_train.rda")
 ##### Features engineering        
 In later sections, we will apply classical machine learning models such that Generalized Linear Model and Generalized Additive Model. As the number of cases is a time series: the number of cases of a week is highly influenced by the number of cases of the previous week, in order to have independent residual errors, we will add lag variables to reduce their auto-correlation. Our model will be able to use the number of cases from the past weeks to predict the number of cases of the current week. 
 ```{r}
-#For Iquitos, we add the lagging variables by 1 week, 3 weeks, 5 weeks
+#We add the lagging variables by 1-5 weeks
 merged_iq_train <- merged_iq_train %>%
   mutate(lag_1_total_cases = lag(total_cases))
 merged_iq_train[1, "lag_1_total_cases"] = 0
@@ -143,11 +143,26 @@ merged_iq_train[1:4, "lag_4_total_cases"] = 0
 merged_iq_train <- merged_iq_train %>%
   mutate(lag_5_total_cases = lag(lag(lag_3_total_cases)))
 merged_iq_train[1:5, "lag_5_total_cases"] = 0
+
+# for San Juan
+merged_sj_train <- merged_sj_train %>%
+  mutate(lag_1_total_cases = lag(total_cases))
+merged_sj_train[1, "lag_1_total_cases"] = 0
+merged_sj_train <- merged_sj_train %>%
+  mutate(lag_3_total_cases = lag(lag(lag_1_total_cases)))
+merged_sj_train[1:3, "lag_3_total_cases"] = 0
+merged_sj_train <- merged_sj_train %>%
+  mutate(lag_4_total_cases = lag(lag_3_total_cases))
+merged_sj_train[1:4, "lag_4_total_cases"] = 0
+merged_sj_train <- merged_sj_train %>%
+  mutate(lag_5_total_cases = lag(lag(lag_3_total_cases)))
+merged_sj_train[1:5, "lag_5_total_cases"] = 0
 ```
 We add a dummy variable Time term to model trend in the data over time. 
 ```{r}
 # We add the Time term 
 merged_iq_train$Time <- seq.int(nrow(merged_iq_train))
+merged_sj_train$Time <- seq.int(nrow(merged_sj_train))
 ```
 
 
@@ -178,8 +193,6 @@ iq_weekly_cases_time_series
 merged_iq_train %>% filter("2001" <= year & year <= "2009") %>% 
   ggplot(aes(x = weekofyear, y = total_cases, color = factor(year))) +
   geom_line()
-
-acf(merged_iq_train$total_cases, lag.max = 52 * 3)
 ```
 
 ```{r echo = FALSE, message = FALSE}
@@ -206,7 +219,6 @@ sj_weekly_cases_time_series
 merged_sj_train %>% filter("1991" <= year & year <= "1999") %>% 
   ggplot(aes(x = weekofyear, y = total_cases, color = factor(year))) +
   geom_line()
-acf(merged_sj_train$total_cases, lag.max = 52*3)
 ```
 ```{r}
 # draw the two histograms
@@ -288,7 +300,7 @@ train_ychap <- predict(g1, newdata = iq_train, type = "response")
 plot(iq_train$total_cases, type='l')
 lines(train_ychap,col='red')
 # look at ACF and PACF of residuals to see if there's auto-correlation
-
+par(mfrow=c(1,2))
 acf(iq_train$total_cases - train_ychap)
 pacf(iq_train$total_cases - train_ychap)
 startTime_iq <- as.Date("2001-01-01")
@@ -325,7 +337,8 @@ train_ychap <- predict(g2, newdata = iq_train, type = "response")
 plot(iq_train$total_cases, type='l')
 lines(train_ychap, col='red')
 # look at ACF and PACF of residuals to see if there's auto-correlation
-
+par(mfrow=c(1,2))
+par("mar"=c(5, 4, 4, 1))
 acf(iq_train$total_cases - train_ychap)
 pacf(iq_train$total_cases - train_ychap)
 
@@ -340,6 +353,7 @@ iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - train_ych
   xlab("Date") + ylab("Total number of cases")
 iq_weekly_cases
 # on test set
+par(mfrow=c(1,1))
 test_ychap <- predict(g2, newdata = iq_test, type = "response")
 mae(iq_test$total_cases, test_ychap)
 plot(iq_test$total_cases, type='l')
@@ -349,7 +363,7 @@ lines(test_ychap,col='red')
 
 ### Regression Tree 
 In this section, we look at Regression tree, a simple method that doesn't require any assumption on the distribution of the variables, and moreover, gives a way to select variables.
-```{r message = FALSE}
+```{r echo = FALSE, message = FALSE}
 library(rpart)
 library(tree)
 library(rpart.plot)
@@ -373,7 +387,7 @@ lines(ychap.tree_iq,col='red')
 print(vip(tree_iq, num_features = 10, bar = FALSE)) # return the importance of the features
 ```
 For San Juan:      
-```{r echo = TRUE, MESSAGE = FALSE, results='hide'}
+```{r echo = TRUE, MESSAGE = FALSE}
 # remove the results = 'hide' to see all the graphs for all the models in the Cross Validation.
 tree_sj <- rpart(formula = total_cases ~ ., 
                  data = sj_train,
@@ -391,11 +405,90 @@ print(vip(tree_sj, num_features = 10, bar = FALSE)) # return the importance of t
 ```
 
 
-### Random Forest            
+### Random Forest   
+```{r echo = FALSE, message = FALSE}
+library(rpart)
+library(tree)
+library(plotmo)
+library(rpart.plot)
+library(caret)
+library(party)
+library(randomForest)
+```
+
+```{r echo = TRUE, MESSAGE = FALSE}
+##############=random forest
+####### Iquitos
+##rf0
+rf0=randomForest(total_cases~.,ntree=500,data=iq_train, importance = TRUE)
+rf0
+imp=importance(rf0,type=1)
+imp[order(imp,decreasing=TRUE),]
+
+rf0.fitted=predict(rf0,data=iq_train)
+rf0.forecast=predict(rf0,newdata=iq_test)
+mae(iq_train$total_cases,rf0.fitted)
+mae(iq_test$total_cases,rf0.forecast)
+plot(iq_test$total_cases, type='l')
+lines(rf0.forecast,col='red')
+# tune mtry
+t <- tuneRF(iq_train[,-34], unlist(iq_train[,34]),
+            stepFactor = 0.5,
+            plot = TRUE,
+            ntree = 500,
+            improve = 1e-5)
+
+rf1=randomForest(total_cases~.,ntree=500,data=iq_train, importance = TRUE, mtry = 3)
+rf1
+imp=importance(rf1,type=1)
+imp[order(imp,decreasing=TRUE),]
+
+rf1.fitted=predict(rf1,data=iq_train)
+rf1.forecast=predict(rf1,newdata=iq_test)
+mae(iq_train$total_cases,rf1.fitted)
+mae(iq_test$total_cases,rf1.forecast)
+plot(iq_test$total_cases, type='l')
+lines(rf1.forecast,col='red')
+```
+
+```{r echo = TRUE, MESSAGE = FALSE}
+###### San Juan
+
+rf0=randomForest(total_cases~.,ntree=500,data=sj_train, importance = TRUE)
+rf0
+imp=importance(rf0,type=1)
+imp[order(imp,decreasing=TRUE),]
+
+rf0.fitted=predict(rf0,data=sj_train)
+rf0.forecast=predict(rf0,newdata=sj_test)
+mae(sj_train$total_cases,rf0.fitted)
+mae(sj_test$total_cases,rf0.forecast)
+plot(sj_test$total_cases, type='l')
+lines(rf0.forecast,col='red')
+# tune mtry
+t <- tuneRF(sj_train[,-34], unlist(sj_train[,34]),
+            stepFactor = 0.5,
+            plot = TRUE,
+            ntree = 500,
+            improve = 0.05)
+
+rf1=randomForest(total_cases~.,ntree=500,data=sj_train, importance = TRUE, mtry = 24)
+rf1
+imp=importance(rf1,type=1)
+imp[order(imp,decreasing=TRUE),]
+
+rf1.fitted=predict(rf1,data=sj_train)
+rf1.forecast=predict(rf1,newdata=sj_test)
+mae(sj_train$total_cases,rf1.fitted)
+mae(sj_test$total_cases,rf1.forecast)
+plot(sj_test$total_cases, type='l')
+lines(rf1.forecast,col='red')
+```
 
 
 ### Times Series (ARIMA model)      
 #### ARIMA model     
+In the following, we try two different ARIMA models, using Boxcox transform and usual diff transform. 
 ```{r message = FALSE}
 library(forecast)
 library(RColorBrewer)

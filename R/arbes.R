@@ -8,11 +8,6 @@ library(rpart.plot)
 library(progress)
 library(mgcv)
 library(dplyr)
-# root mean square deviation
-rmse<-function(eps)
-{
-  return(round(sqrt(mean(eps^2,na.rm=TRUE)),digits=0))
-}
 # mean of absolute value of errors
 mae<-function(y,ychap)
 {

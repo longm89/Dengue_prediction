@@ -7,16 +7,10 @@ library(xts)
 library(MASS)
 library(caret)
 library(dplyr)
-rmse<-function(eps)
+mae<-function(y,ychap)
 {
-  return(round(sqrt(mean(eps^2,na.rm=TRUE)),digits=0))
+  return(round(mean(abs(y-ychap)), digit = 2))
 }
-
-mape<-function(y,ychap)
-{
-  return(round(100*mean(abs(y-ychap)/abs(y)),digits=2))
-}
-
 ###############Import data
 getwd()
 load("rdas/merged_iq_train.rda")
