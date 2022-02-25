@@ -95,7 +95,7 @@ The data for each city consists of:
   + ndvi_ne – Pixel northeast of city centroid
   + ndvi_nw – Pixel northwest of city centroid
   
-We separate the data into two parts for each country and add the missing values using spline interpolation.   
+We separate the csv file, including the two countries, into each file for each country and add the missing values using spline interpolation.   
 
 ##### Data from WorldBank           
 
@@ -108,12 +108,13 @@ We download the data from WorldBank, clean and select important variables that m
 * Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+
 
 These two sources of data form the following groups:         
-* Time of the year 
+* Time of the year          
 * Climate variables       
 * Total population       
 * Population density       
 * Population age      
-* Economical condition   
+* Economical condition  
+
 The code for cleaning the data could be found in:  Dengue_prediction/R/wrangle-data.R. We import the clean data:
 
 ```{r}
@@ -892,5 +893,5 @@ lines(aggregation_sj_forecast, col='red')
 ```
 
 ## Conclusion
-In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Aggregation Experts to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. Together with a more fine tuning of the models and a better choice of putting the models together, it's promising that these models could achieve a better result.    
+In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Aggregation Experts to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. The graphs of some of the best models show that the prediction is 1-week lag, so it might be better to predict the number of cases using the environmental data from the previous week. Together with a more fine tuning of the models, a better feature engineering and a better choice of putting the models together, it's promising that these models could achieve a better result.    
 

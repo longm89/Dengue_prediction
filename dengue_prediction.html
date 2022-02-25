@@ -285,7 +285,7 @@ pre code {
 <li>ndvi_nw – Pixel northwest of city centroid</li>
 </ul></li>
 </ul>
-<p>We separate the data into two parts for each country and add the missing values using spline interpolation.</p>
+<p>We separate the csv file, including the two countries, into each file for each country and add the missing values using spline interpolation.</p>
 </div>
 <div id="data-from-worldbank" class="section level5">
 <h5>Data from WorldBank</h5>
@@ -297,12 +297,13 @@ pre code {
 * employment_to_population_average<br />
 * Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+</p>
 <p>These two sources of data form the following groups:<br />
-* Time of the year * Climate variables<br />
+* Time of the year<br />
+* Climate variables<br />
 * Total population<br />
 * Population density<br />
 * Population age<br />
-* Economical condition<br />
-The code for cleaning the data could be found in: Dengue_prediction/R/wrangle-data.R. We import the clean data:</p>
+* Economical condition</p>
+<p>The code for cleaning the data could be found in: Dengue_prediction/R/wrangle-data.R. We import the clean data:</p>
 <pre class="r"><code># import the cleaned data
 load(&quot;rdas/merged_iq_train.rda&quot;)
 load(&quot;rdas/merged_sj_train.rda&quot;)</code></pre>
@@ -1057,7 +1058,7 @@ lines(aggregation_sj_forecast, col=&#39;red&#39;)</code></pre>
 </div>
 <div id="conclusion" class="section level2">
 <h2>Conclusion</h2>
-<p>In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Aggregation Experts to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. Together with a more fine tuning of the models and a better choice of putting the models together, it’s promising that these models could achieve a better result.</p>
+<p>In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Aggregation Experts to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. The graphs of some of the best models show that the prediction is 1-week lag, so it might be better to predict the number of cases using the environmental data from the previous week. Together with a more fine tuning of the models, a better feature engineering and a better choice of putting the models together, it’s promising that these models could achieve a better result.</p>
 </div>
 
 
