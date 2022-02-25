@@ -52,22 +52,14 @@ Additionally, we downloaded the environmental, social and economic data from Wor
 Another data that can affect the spread of the disease is the number of migration, however, we couldn't find the data.
 
 #### Methods
+We will model the total number of cases using the following models:        
 
-##### Linear Regression
-
-##### Generalized Linear Models with the Negative Binomial Distribution family
-
-##### Model GAM with the Negative Binomial Distribution family
-
-##### Regression Tree 
-
-##### Random Forest
-
-##### Times Series (ARIMA)
-
-##### Gradient Boosting
-
-##### Expert Aggregation
+* Model GAM with the Negative Binomial Distribution family          
+* Regression Tree         
+* Random Forest        
+* Times Series (ARIMA)                  
+* Gradient Tree Boosting             
+* Expert Aggregation       
 
 ## Data Wrangling and Exploration 
 #### Data Wrangling   
