@@ -690,7 +690,7 @@ best <- which.min(gbm.fit$cv.error) # find index for the number of trees with mi
 #gbm.fit$cv.error[best]
 #gbm.perf(gbm.fit, method = "cv")
 pred_iq <- predict(gbm.fit, n.trees = best, iq_test_, type="response")
-mae(iq_test$total_cases, pred_iq) # 4.28
+mae(iq_test$total_cases, pred_iq) # 4.55
 plot(iq_test$total_cases,type='l')
 lines(pred_iq, col='red')
 ```
@@ -901,5 +901,5 @@ lines(aggregation_sj_forecast, col='red')
 In the case of San Juan, our aggregation of expert advices gives a MAE score of 7.47. Hence, in the case of Iquitos, the EG strategy proves to be useful as it gives predictions even better than the best experts. 
 
 ## Conclusion
-In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Exponentiated Gradient forecaster to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in some of these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. The graphs of some of the best models show that the prediction is 1-week lag, so it might be better to predict the number of cases of the current week using the environmental data from the previous week. Together with a more fine tuning of the models, a better feature engineering and a better choice of chaining the models together, it's promising that these models could achieve a even better result.    
+In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Exponentiated Gradient forecaster to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in some of these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. The graphs of some of the best models show that the prediction is 1-week lag, so it might be better to predict the number of cases of the current week using the environmental data from the previous week. Together with a more fine tuning of the models, a better feature engineering and a better choice of chaining the models together, it's promising that these models could achieve even better results.    
 
