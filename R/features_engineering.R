@@ -17,12 +17,15 @@ merged_iq_train <- eval(parse(text=paste("data.frame(merged_iq_train,",cos,",",s
 names(merged_iq_train)
 
 #################### add lag features
-# For Iquitos
+#for Iquitos
 merged_iq_train <- merged_iq_train %>%
   mutate(lag_1_total_cases = lag(total_cases))
 merged_iq_train[1, "lag_1_total_cases"] = 0
 merged_iq_train <- merged_iq_train %>%
-  mutate(lag_3_total_cases = lag(lag(lag_1_total_cases)))
+  mutate(lag_2_total_cases = lag(lag_1_total_cases))
+merged_iq_train[1:2, "lag_2_total_cases"] = 0
+merged_iq_train <- merged_iq_train %>%
+  mutate(lag_3_total_cases = lag(lag_2_total_cases))
 merged_iq_train[1:3, "lag_3_total_cases"] = 0
 merged_iq_train <- merged_iq_train %>%
   mutate(lag_4_total_cases = lag(lag_3_total_cases))
@@ -30,13 +33,16 @@ merged_iq_train[1:4, "lag_4_total_cases"] = 0
 merged_iq_train <- merged_iq_train %>%
   mutate(lag_5_total_cases = lag(lag(lag_3_total_cases)))
 merged_iq_train[1:5, "lag_5_total_cases"] = 0
-# For San Juan
+
 # for San Juan
 merged_sj_train <- merged_sj_train %>%
   mutate(lag_1_total_cases = lag(total_cases))
 merged_sj_train[1, "lag_1_total_cases"] = 0
 merged_sj_train <- merged_sj_train %>%
-  mutate(lag_3_total_cases = lag(lag(lag_1_total_cases)))
+  mutate(lag_2_total_cases = lag(lag_1_total_cases))
+merged_sj_train[1:2, "lag_2_total_cases"] = 0
+merged_sj_train <- merged_sj_train %>%
+  mutate(lag_3_total_cases = lag(lag_2_total_cases))
 merged_sj_train[1:3, "lag_3_total_cases"] = 0
 merged_sj_train <- merged_sj_train %>%
   mutate(lag_4_total_cases = lag(lag_3_total_cases))

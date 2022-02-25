@@ -1,8 +1,11 @@
 ---
 title: "Dengue Forecasting"
 author: "Axel Forveille, MAI Tien Long"
-output: html_document
+output: 
+  html_document:
+    code_folding: hide
 ---
+The code and the raw and clean data for the project could be found in: https://github.com/longm89/Dengue_prediction
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -54,13 +57,13 @@ Another data that can affect the spread of the disease is the number of migratio
 
 ##### Generalized Linear Models with the Negative Binomial Distribution family
 
-##### Model GAM 
+##### Model GAM with the Negative Binomial Distribution family
 
 ##### Regression Tree 
 
 ##### Random Forest
 
-##### Times Series (ARIMA and SARIMA)
+##### Times Series (ARIMA)
 
 ##### Gradient Boosting
 
@@ -94,7 +97,7 @@ The data for each city consists of:
   + reanalysis_min_air_temp_k – Minimum air temperature
   + reanalysis_avg_temp_k – Average air temperature
   + reanalysis_tdtr_k – Diurnal temperature range
-* Satellite vegetation. 
+* Satellite vegetation: Normalized difference vegetation index           
   + ndvi_se – Pixel southeast of city centroid
   + ndvi_sw – Pixel southwest of city centroid
   + ndvi_ne – Pixel northeast of city centroid
@@ -104,7 +107,7 @@ We separate the data into two parts for each country and add the missing values 
 
 ##### Data from WorldBank           
 
-We download the data from WorldBank, clean and select important variables that might contribute to the prediction of the number of Dengue cases:
+We download the data from WorldBank, clean and select important variables that might contribute to the prediction of the number of Dengue cases:        
 * Total population       
 * population_density_people_per_sq_km_of_land_area       
 * forest_area_sq_km       
@@ -112,14 +115,14 @@ We download the data from WorldBank, clean and select important variables that m
 * employment_to_population_average      
 * Population age percentage: 0 - 9, 10 - 20, 20 - 60, 60+
 
-We see that all the explicable variables make sense. We can group them into the following groups:       
+These two sources of data form the following groups:         
 * Time of the year 
 * Climate variables       
 * Total population       
 * Population density       
 * Population age      
 * Economical condition   
-There are several variables from climate variables correlate with each other. 
+The code for cleaning the data could be found in:  Dengue_prediction/R/wrangle-data.R. We import the clean data:
 
 ```{r}
 
@@ -128,14 +131,19 @@ load("rdas/merged_iq_train.rda")
 load("rdas/merged_sj_train.rda")
 ```
 ##### Features engineering        
-In later sections, we will apply classical machine learning models such that Generalized Linear Model and Generalized Additive Model. As the number of cases is a time series: the number of cases of a week is highly influenced by the number of cases of the previous week, in order to have independent residual errors, we will add lag variables to reduce their auto-correlation. Our model will be able to use the number of cases from the past weeks to predict the number of cases of the current week. 
+In later sections, we will apply classical machine learning models such that Generalized Additive Model, Regression Tree, Random Forest, Arima model. As the number of cases is a time series: the number of cases of a week is highly influenced by the number of cases of the previous week, in order to have independent residual errors, we will add lag variables to reduce their auto-correlation. Our model will be able to use the number of cases from the past weeks to predict the number of cases of the current week. 
 ```{r}
-#We add the lagging variables by 1-5 weeks
+#Add the lagging variables by 1-5 weeks
+
+#for Iquitos
 merged_iq_train <- merged_iq_train %>%
   mutate(lag_1_total_cases = lag(total_cases))
 merged_iq_train[1, "lag_1_total_cases"] = 0
 merged_iq_train <- merged_iq_train %>%
-  mutate(lag_3_total_cases = lag(lag(lag_1_total_cases)))
+  mutate(lag_2_total_cases = lag(lag_1_total_cases))
+merged_iq_train[1:2, "lag_2_total_cases"] = 0
+merged_iq_train <- merged_iq_train %>%
+  mutate(lag_3_total_cases = lag(lag_2_total_cases))
 merged_iq_train[1:3, "lag_3_total_cases"] = 0
 merged_iq_train <- merged_iq_train %>%
   mutate(lag_4_total_cases = lag(lag_3_total_cases))
@@ -149,7 +157,10 @@ merged_sj_train <- merged_sj_train %>%
   mutate(lag_1_total_cases = lag(total_cases))
 merged_sj_train[1, "lag_1_total_cases"] = 0
 merged_sj_train <- merged_sj_train %>%
-  mutate(lag_3_total_cases = lag(lag(lag_1_total_cases)))
+  mutate(lag_2_total_cases = lag(lag_1_total_cases))
+merged_sj_train[1:2, "lag_2_total_cases"] = 0
+merged_sj_train <- merged_sj_train %>%
+  mutate(lag_3_total_cases = lag(lag_2_total_cases))
 merged_sj_train[1:3, "lag_3_total_cases"] = 0
 merged_sj_train <- merged_sj_train %>%
   mutate(lag_4_total_cases = lag(lag_3_total_cases))
@@ -169,8 +180,9 @@ merged_sj_train$Time <- seq.int(nrow(merged_sj_train))
 #### Data Exploration   
 
 
-##### Visualising the number of cases over the year:
-```{r echo = FALSE, message = FALSE}
+##### Visualising the number of cases over the year:      
+For Iquitos:      
+```{r echo = TRUE, message = FALSE}
 ######## For Iquitos
 # Define Start and end times for the subset as R objects that are the time class
 startTime_iq <- as.Date("2001-01-01")
@@ -195,7 +207,8 @@ merged_iq_train %>% filter("2001" <= year & year <= "2009") %>%
   geom_line()
 ```
 
-```{r echo = FALSE, message = FALSE}
+The blue dot line is the moving average of 52 weeks, indicating the trend in the series. We also plot the number of cases over the year, and we see that there are more cases on weeks 1-10 and weeks 40-52.       
+```{r echo = TRUE, message = FALSE}
 # For San Juan
 # create a start and end time R object
 startTime_sj <- as.Date("1990-04-30")
@@ -220,29 +233,29 @@ merged_sj_train %>% filter("1991" <= year & year <= "1999") %>%
   ggplot(aes(x = weekofyear, y = total_cases, color = factor(year))) +
   geom_line()
 ```
-```{r}
+
+We do similar plots for San Juan. There's also trend in the data. There are more cases on weeks 30-52.    
+In the following, we draw the two histograms of the number of cases and look at their mean and variance:       
+```{r echo = TRUE, message = FALSE}
 # draw the two histograms
 iq_histogram <- ggplot(data=merged_iq_train, aes(total_cases)) +
   geom_histogram(aes(y =..density..), fill = "orange") +
-  geom_density()
+  geom_density() +
+  ggtitle("Histogram of total cases in Iquitos ")
 
 sj_histogram <- ggplot(data=merged_sj_train, aes(total_cases)) +
   geom_histogram(aes(y =..density..), fill = "orange") +
-  geom_density()
+  geom_density() + 
+  ggtitle("Histogram of total cases in San Juan ") 
 
 grid.arrange(iq_histogram, sj_histogram, ncol=2)
-mean(merged_iq_train$total_cases)
-var(merged_iq_train$total_cases)
-
-mean(merged_sj_train$total_cases)
-var(merged_sj_train$total_cases)
+mean(merged_iq_train$total_cases) # mean of Iquitos
+var(merged_iq_train$total_cases) # variance of Iquitos
+mean(merged_sj_train$total_cases) # mean of San Juan
+var(merged_sj_train$total_cases) # variance of San Juan
 ```
 
-Some observations:
-
-* There are more cases in San Juan than Iquitos   
-* There are the peaks that we would like to predict. They happen in what months? Are there periods or seasonality trends?       
-* The number of cases for both cities do not follow Gaussian distributions. It suggests that we should use Generalized Linear Model, as described in Simon N. Wood's book: Generalized Additive Models. The number of cases are natural numbers, we will assume that they follow Poisson distribution or Negative Binomial distribution, and in particular Negative Binomial distribution as the mean is much smaller than the variance. In fact, the Poisson distribution can be interpreted as a special case of the Negative Binomial distribution when the parameter $r \rightarrow \infty$ and is used as a way to model an over-dispersed Poisson distribution.
+The number of cases for both cities do not follow Gaussian distributions and are natural numbers. Therefore, we will assume that they follow Poisson distribution or Negative Binomial distribution, and in particular Negative Binomial distribution as the mean is much smaller than the variance. In fact, the Poisson distribution can be interpreted as a special case of the Negative Binomial distribution when the parameter $r \rightarrow \infty$ and is used as a way to model an over-dispersed Poisson distribution.
 
 
 
@@ -251,17 +264,16 @@ Some observations:
 In the following, we will split the data into a training set and a testing set. As our data is time series, instead of a random selection of each set, we split our time series with respect to chronology, in order to train our models on the past data, and test the predictions on the future. 
 
 ```{r}
+
+##################Split train and test sets
 # For Iquitos
 iq_train_size <- round(nrow(merged_iq_train) * 0.8)
-iq_train <- merged_iq_train %>% slice(1: iq_train_size)
-iq_test <- merged_iq_train %>% slice(iq_train_size + 1: nrow(merged_iq_train))
-
-
+iq_train <- head(merged_iq_train, iq_train_size)
+iq_test <- tail(merged_iq_train, nrow(merged_iq_train) - iq_train_size)
 # For San Juan
-
 sj_train_size <- round(nrow(merged_sj_train) * 0.8)
-sj_train <- merged_sj_train %>% slice(1: sj_train_size)
-sj_test <- merged_sj_train %>% slice(sj_train_size + 1: nrow(merged_sj_train))
+sj_train <- head(merged_sj_train, sj_train_size)
+sj_test <- tail(merged_sj_train, nrow(merged_sj_train) - sj_train_size)
 
 ```
 
@@ -281,24 +293,26 @@ library(mgcv)
 library(tidymv)
 library(mgcViz)
 ```
-In the following, we fit GAM models using temperature features, the population feature and moreover, Time, weekofyear to model trend and seasonality. After that, we look at another model, this time adding auto-regressive features such as lag variables.
+We first fit a GAM model with the Negative Binomial distribution family, using temperature features, the population feature and moreover, Time, weekofyear to model trend and seasonality. After that, we look at another model, this time adding auto-regressive features such as lag variables.     
+
 For Iquitos: 
 
-```{r}
+```{r class.source = 'fold-show'}
 g1 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
   + s(population_total) 
   + s(Time) + s(weekofyear) 
-
   ,family = nb(), data = iq_train, method = "REML")
 #gam.check(g1)
 summary(g1)
 #plot.gam(g1)
+```
+
+The deviance explained is 68.7%. The variables weekofyear and  reanalysis_specific_humidity_g_per_kg are significant (with very small p-values) in predicting the number of cases. We look at the ACF, PACF and the graph of the residuals:        
 
 
+```{r echo = TRUE, message = FALSE}
 # on train set
 train_ychap <- predict(g1, newdata = iq_train, type = "response")
-plot(iq_train$total_cases, type='l')
-lines(train_ychap,col='red')
 # look at ACF and PACF of residuals to see if there's auto-correlation
 par(mfrow=c(1,2))
 acf(iq_train$total_cases - train_ychap)
@@ -311,21 +325,28 @@ iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - train_ych
   geom_line(na.rm=TRUE) + 
   geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
   ggtitle("Residuals from 2001 - 2010 in Iquitos") +
-  xlab("Date") + ylab("Total number of cases")
+  xlab("Date") + ylab("Residual of number of cases")
 iq_weekly_cases
+```
+
+There are still a lot of auto-correlations in the data and there's a problem with the variance in the residues. We look at how it fits on the testing set and the MAE score: 
+
+```{r echo = TRUE, message = FALSE}
 # on test set
 test_ychap <- predict(g1, newdata = iq_test, type = "response")
-mae(iq_test$total_cases, test_ychap)
+
 plot(iq_test$total_cases, type='l')
 lines(test_ychap,col='red')
-
+mae(iq_test$total_cases, test_ychap)
 ```
+
+One idea to improve the model is to fit a SARIMA model to the residuals. In the following, to make things simple, we will add lag variables to improve the model:    
 
 ```{r}
 g2 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
   + s(population_total) 
   + s(Time) + s(weekofyear) 
-  + s(log(lag_1_total_cases+1)) + s(log(lag_3_total_cases+1))
+  + s(log(lag_1_total_cases+1)) + s(log(lag_2_total_cases+1))+ s(log(lag_3_total_cases+1))
   ,family = nb(), data = iq_train, method = "REML")
 #gam.check(g2)
 summary(g2)
@@ -334,14 +355,15 @@ summary(g2)
 
 # on train set
 train_ychap <- predict(g2, newdata = iq_train, type = "response")
-plot(iq_train$total_cases, type='l')
-lines(train_ychap, col='red')
 # look at ACF and PACF of residuals to see if there's auto-correlation
 par(mfrow=c(1,2))
 par("mar"=c(5, 4, 4, 1))
 acf(iq_train$total_cases - train_ychap)
 pacf(iq_train$total_cases - train_ychap)
+```
 
+
+```{r}
 startTime_iq <- as.Date("2001-01-01")
 endTime_iq <- as.Date("2009-12-24")
 # create a start and end time R object
@@ -350,7 +372,7 @@ iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - train_ych
   geom_line(na.rm=TRUE) + 
   geom_ma(ma_fun = SMA, n = 52) + # moving average with period of 52 weeks to detect trend
   ggtitle("Residuals from 2001 - 2010 in Iquitos") +
-  xlab("Date") + ylab("Total number of cases")
+  xlab("Date") + ylab("Residual of number of cases")
 iq_weekly_cases
 # on test set
 par(mfrow=c(1,1))
@@ -361,49 +383,47 @@ lines(test_ychap,col='red')
 
 ```
 
+The deviance explained is increased to 78.4%, the MAE score is reduced to 5.54. The ACF and PACF graphs show that the auto-correlation and partial auto-correlation coefficients are small (< 0.15), even though we could possibly still fit an ARIMA model to the residuals to imrpove more. There's little trend remaining in the residuals, and there's still a problem with the variance of the residual. The graph fits better on the testing data than the previous model.      
+
+
 ### Regression Tree 
 In this section, we look at Regression tree, a simple method that doesn't require any assumption on the distribution of the variables, and moreover, gives a way to select variables.
 ```{r echo = FALSE, message = FALSE}
 library(rpart)
 library(tree)
 library(rpart.plot)
-library(vip) # for feature importance
 ```
 We first look at Iquitos:
 
 ```{r echo = TRUE, MESSAGE = FALSE}
-
+set.seed(123)
 tree_iq <- rpart(formula = total_cases ~ ., 
                  data = iq_train,
                  method = "anova")
 rpart.plot(tree_iq)
-ychap.tree_iq <- predict(tree_iq, newdata = iq_train)
-plot(iq_train$total_cases, type='l')
-lines(ychap.tree_iq,col='red')
 ychap.tree_iq <- predict(tree_iq, newdata = iq_test)
 mae(iq_test$total_cases, ychap.tree_iq)
 plot(iq_test$total_cases, type='l')
 lines(ychap.tree_iq,col='red')
-print(vip(tree_iq, num_features = 10, bar = FALSE)) # return the importance of the features
 ```
+
+The MAE score is 5.49. The important features to predict the number of cases are the number of cases from the last 1, 2, 4 weeks, the air temperature, and the vegetation index ndvi_sw.   
+
 For San Juan:      
 ```{r echo = TRUE, MESSAGE = FALSE}
-# remove the results = 'hide' to see all the graphs for all the models in the Cross Validation.
 tree_sj <- rpart(formula = total_cases ~ ., 
                  data = sj_train,
                  method = "anova")
 rpart.plot(tree_sj)
-ychap.tree_sj <- predict(tree_sj, newdata = sj_train)
-plot(sj_train$total_cases, type='l')
-lines(ychap.tree_sj,col='red')
+
 ychap.tree_sj <- predict(tree_sj, newdata = sj_test)
 mae(sj_test$total_cases, ychap.tree_sj)
 plot(sj_test$total_cases, type='l')
 lines(ychap.tree_sj,col='red')
-print(vip(tree_sj, num_features = 10, bar = FALSE)) # return the importance of the features
 
 ```
 
+The MAE score is 8.95. The important features to predict the number of cases are the number of cases from the last week and the vegetation index ndvi_se. 
 
 ### Random Forest   
 ```{r echo = FALSE, message = FALSE}
@@ -414,23 +434,15 @@ library(rpart.plot)
 library(caret)
 library(party)
 library(randomForest)
+# set the seed 
+set.seed(123)
 ```
 
-```{r echo = TRUE, MESSAGE = FALSE}
-##############=random forest
-####### Iquitos
-##rf0
-rf0=randomForest(total_cases~.,ntree=500,data=iq_train, importance = TRUE)
-rf0
-imp=importance(rf0,type=1)
-imp[order(imp,decreasing=TRUE),]
+We fit a random forest model for Iquitos with parameter mtry = 3, the number of variables randomly sampled as candidates when forming each split when building each tree. The parameter is searched using tuneRF. We then look at the MAE score and its prediction graph on test set. 
 
-rf0.fitted=predict(rf0,data=iq_train)
-rf0.forecast=predict(rf0,newdata=iq_test)
-mae(iq_train$total_cases,rf0.fitted)
-mae(iq_test$total_cases,rf0.forecast)
-plot(iq_test$total_cases, type='l')
-lines(rf0.forecast,col='red')
+```{r echo = TRUE, MESSAGE = FALSE}
+
+####### Iquitos
 # tune mtry
 t <- tuneRF(iq_train[,-34], unlist(iq_train[,34]),
             stepFactor = 0.5,
@@ -440,55 +452,30 @@ t <- tuneRF(iq_train[,-34], unlist(iq_train[,34]),
 
 rf1=randomForest(total_cases~.,ntree=500,data=iq_train, importance = TRUE, mtry = 3)
 rf1
-imp=importance(rf1,type=1)
-imp[order(imp,decreasing=TRUE),]
-
 rf1.fitted=predict(rf1,data=iq_train)
 rf1.forecast=predict(rf1,newdata=iq_test)
-mae(iq_train$total_cases,rf1.fitted)
 mae(iq_test$total_cases,rf1.forecast)
 plot(iq_test$total_cases, type='l')
 lines(rf1.forecast,col='red')
 ```
 
+The variance explained is 50.61%. The MAE score on test set is 5.08, better than the MAE score of 5.49 of the tree model. The prediction is more robust.      
+
+Similarly for San Juan:      
+
 ```{r echo = TRUE, MESSAGE = FALSE}
 ###### San Juan
-
-rf0=randomForest(total_cases~.,ntree=500,data=sj_train, importance = TRUE)
-rf0
-imp=importance(rf0,type=1)
-imp[order(imp,decreasing=TRUE),]
-
-rf0.fitted=predict(rf0,data=sj_train)
-rf0.forecast=predict(rf0,newdata=sj_test)
-mae(sj_train$total_cases,rf0.fitted)
-mae(sj_test$total_cases,rf0.forecast)
-plot(sj_test$total_cases, type='l')
-lines(rf0.forecast,col='red')
-# tune mtry
-t <- tuneRF(sj_train[,-34], unlist(sj_train[,34]),
-            stepFactor = 0.5,
-            plot = TRUE,
-            ntree = 500,
-            improve = 0.05)
-
-rf1=randomForest(total_cases~.,ntree=500,data=sj_train, importance = TRUE, mtry = 24)
+rf1=randomForest(total_cases~.,ntree=500,data=sj_train, importance = TRUE, mtry = 13)
 rf1
-imp=importance(rf1,type=1)
-imp[order(imp,decreasing=TRUE),]
-
-rf1.fitted=predict(rf1,data=sj_train)
 rf1.forecast=predict(rf1,newdata=sj_test)
-mae(sj_train$total_cases,rf1.fitted)
 mae(sj_test$total_cases,rf1.forecast)
 plot(sj_test$total_cases, type='l')
 lines(rf1.forecast,col='red')
 ```
 
+The Random Forest model works surprisingly well for San Juan, with variance explained = 91.81%. The MAE score on test set is is 7.55. The prediction is very robust.   
 
 ### Times Series (ARIMA model)      
-#### ARIMA model     
-In the following, we try two different ARIMA models, using Boxcox transform and usual diff transform. 
 ```{r message = FALSE}
 library(forecast)
 library(RColorBrewer)
@@ -496,8 +483,17 @@ library(magrittr)
 library(dplyr)
 library(geoR)
 ```
-```{r}
 
+First, we look at Iquitos. The total number of cases is a time series.        
+```{r}
+ts_iq<-ts(iq_train$total_cases, frequency=1) 
+par(mfrow=c(1,2))
+plot(ts_iq)
+plot(diff(ts_iq)) # there's a problem with the variance, the series is not stationary
+```
+
+After taking the difference of the time series, we see that the mean is 0, however, the variance changes, hence even after taking the difference, the series is not stationary. We could proceed by trying the Box Cox transformation to stabilize the variance, or to continue fitting an ARIMA model. We first proceed with the Box Cox transformation. For this transformation of the series, we use a version with parameters lambda1 and lambda2, because our data contains 0.       
+```{r}
 # Two-parameter Box-Cox transform 
 boxcox.transform <- function(x, lambda1, lambda2) {
   if (lambda1!=0) {
@@ -516,61 +512,393 @@ boxcox.inv <- function(x, lambda1, lambda2) {
   }
 }
 ```
-```{r}
-#####################################################################
-#######################time series: SARIMA model
-#####################################################################
 
-ts<-ts(iq_train$total_cases, frequency=1) 
-par(mfrow=c(1,2))
-plot(ts)
-plot(diff(ts)) # there's a problem with the variance, the series is not stationary
-lambda_estimates <- boxcoxfit(ts, lambda2 = TRUE) # use boxcox transformation, with 2 lambdas, 
-# because the series contains 0
+```{r}
+lambda_estimates <- boxcoxfit(ts_iq, lambda2 = TRUE) 
+# use boxcox transformation, with 2 lambdas, because the series contains 0
 lambda1 <- lambda_estimates$lambda[1]
 lambda2 <- lambda_estimates$lambda[2]
 
-ts_with_box_cox_transform <- boxcox.transform(ts, lambda1, lambda2)
+ts_iq_box_cox_transform <- boxcox.transform(ts_iq, lambda1, lambda2)
 par(mfrow=c(1,3))
-plot(ts_with_box_cox_transform)
-acf(ts_with_box_cox_transform, lag.max = 52*3) # ACF slowly decreases, need to take diff
-pacf(ts_with_box_cox_transform, lag.max = 52*3)
-
+plot(ts_iq_box_cox_transform)
+acf(ts_iq_box_cox_transform, lag.max = 52*3) # ACF slowly decreases, need to take diff
+pacf(ts_iq_box_cox_transform, lag.max = 52*3)
 par(mfrow=c(1,3))
 
-plot(diff(ts_with_box_cox_transform))
-acf(diff(ts_with_box_cox_transform), lag.max = 52*3)
-pacf(diff(ts_with_box_cox_transform), lag.max = 52*3)
+plot(diff(ts_iq_box_cox_transform))
+acf(diff(ts_iq_box_cox_transform), lag.max = 52*3)
+pacf(diff(ts_iq_box_cox_transform), lag.max = 52*3)
 
-#Pmax=0
-#Qmax=0
 
 par(mfrow=c(1,2))
-a1 <- acf(diff(ts_with_box_cox_transform), lag.max = 52)
-b1 <- pacf(diff(ts_with_box_cox_transform), lag.max = 52)
+a1 <- acf(diff(ts_iq_box_cox_transform), lag.max = 52)
+b1 <- pacf(diff(ts_iq_box_cox_transform), lag.max = 52)
+```
 
+The P max, Q max are not clear, while pmax = 3 or 24, qmax = 1. We fit an ARIMA model with p = 3, d = 1, q = 1 to the Box Cox transform of the time series of total cases of Iquitos. 
+
+
+```{r}
+#Pmax=0
+#Qmax=0
 ###pmax= 3 ou 24
 ###qmax= 1
 
-fit1 <- Arima(ts_with_box_cox_transform, order = c(3,1,1))
+fit1_iq <- Arima(ts_iq_box_cox_transform, order = c(3,1,1))
 
-ts_forecast_boxcox <- boxcox.transform(ts(merged_iq_train$total_cases,  frequency=1), lambda1, lambda2)
-refit <- Arima(ts_forecast_boxcox, model=fit1)
-prevARIMA1_with_boxcox_transform <- tail(refit$fitted, nrow(iq_test)) %>% as.numeric
-predict_ARIMA1 <- boxcox.inv(prevARIMA1_with_boxcox_transform, lambda1, lambda2)
-mae(iq_test$total_cases, predict_ARIMA1)
-
-
-par(mfrow=c(1,1))
-plot(iq_test$total_cases,type='l')
-lines(predict_ARIMA1, col='red')
+ts_iq_forecast_boxcox <- boxcox.transform(ts(merged_iq_train$total_cases,  frequency=1), lambda1, lambda2)
+refit_iq <- Arima(ts_iq_forecast_boxcox, model=fit1_iq)
 
 ```
 
+We look at the ACF, PACF and the plot of the residuals. 
+
+```{r}
+trainARIMA1_with_boxcox_transform_iq <- head(refit_iq$fitted, nrow(iq_train)) %>% as.numeric
+train_ARIMA1_iq <- boxcox.inv(trainARIMA1_with_boxcox_transform_iq, lambda1, lambda2)
+par(mfrow=c(1,3))
+acf(iq_train$total_cases - train_ARIMA1_iq)
+pacf(iq_train$total_cases - train_ARIMA1_iq)
+plot(iq_train$total_cases - train_ARIMA1_iq)
+```
+
+The ACF and PACF graphs show that there are still little auto-correlations. The residuals look random, even though there's still a problem of the variance. 
+
+```{r}
+# check the MAE on test set
+prevARIMA1_with_boxcox_transform_iq <- tail(refit_iq$fitted, nrow(iq_test)) %>% as.numeric
+predict_ARIMA1_iq <- boxcox.inv(prevARIMA1_with_boxcox_transform_iq, lambda1, lambda2)
+mae(iq_test$total_cases, predict_ARIMA1_iq)
+par(mfrow=c(1,1))
+plot(iq_test$total_cases,type='l')
+lines(predict_ARIMA1_iq%>%as.numeric, col='red')
+```
+
+The MAE score on test set is 4.42 and our model could fit the data.         
+
+We proceed with taking the difference of the original series and fitting another ARIMA model, in spite of the variance in the difference.   
+```{r}
+par(mfrow=c(1,3))
+plot(diff(ts_iq))
+acf(diff(ts_iq), lag.max=52*3)
+pacf(diff(ts_iq), lag.max=52*3)
+
+#Pmax=0
+#Qmax=0
+acf(diff(ts_iq), lag.max=20)
+pacf(diff(ts_iq), lag.max=20)
+#pmax = 3
+#qmax = 6
+```
+
+Looking at the ACF and PACF, we then fit an ARIMA model with P = 0, Q = 0, p = 3, d = 1, q = 6 and look again at the residuals and the ACF and PACF.  
+
+
+```{r}
+fit2_iq <- Arima(ts_iq, order=c(3,1,6), method=c("CSS"))
+ts_forecast <- ts(merged_iq_train$total_cases,  frequency=1)
+refit2_iq <- Arima(ts_forecast, model=fit2_iq)
+
+# see if there is still residual on the training set
+trainARIMA2_iq <- head(refit2_iq$fitted, nrow(iq_train)) %>% as.numeric
+par(mfrow=c(1,1))
+plot(iq_train$total_cases - trainARIMA2_iq)
+par(mfrow=c(1,2))
+acf(iq_train$total_cases - trainARIMA2_iq)
+pacf(iq_train$total_cases - trainARIMA2_iq)
+```
+
+The residuals look random, and the ACF and PACF do not show any auto-correlations. 
+
+```{r}
+# MAE on test set
+prevARIMA2_iq <- tail(refit2_iq$fitted, nrow(iq_test))
+mae(iq_test$total_cases, prevARIMA2_iq)
+
+par(mfrow=c(1,1))
+plot(iq_test$total_cases,type='l')
+lines(prevARIMA2_iq%>%as.numeric, col='red')
+```
+
+The MAE score is 4.27 and we could predict the peaks.  
+
 ### Gradient Boosting
+```{r echo=FALSE, message = FALSE}
+library(gbm)
+iq_train_ <- iq_train %>% subset(select = -c(city, week_start_date))
+iq_test_ <- iq_test %>% subset(select = -c(city, week_start_date))
+sj_train_ <- sj_train %>% subset(select = -c(city, week_start_date))
+sj_test_ <- sj_test %>% subset(select = -c(city, week_start_date))
+```
+
+
+In this section, we build Gradient Boosted trees models, powerful ensembles of decision trees as weak learners. Unlike Random Forest models, which perform well with little hyperparameters tuning, for GBM models, we need to tune boosting parameters such as the number of trees and the learning rate, as well as tree specific parameters such as tree depth and the minimum numbers of observations in the terminal nodes. For simplicity, we will just use a grid search to find some best hyper-parameters. The family distribution is "poisson" for counting data.    
+
+For Iquitos:           
+```{r}
+# hyper_grid <- expand.grid(
+#   shrinkage = c(.05, .1, .2),
+#   interaction.depth = c(1, 2, 3),
+#   n.minobsinnode = c(5, 7, 10),
+#   bag.fraction = c(.65, .8, 1), 
+#   optimal_trees = 0,               # number of trees
+#   min_error = 0                     # min error
+# )
+# 
+# # grid search
+# for(i in 1:nrow(hyper_grid)) {
+#   # train model
+#   print(i)
+#   gbm.tune <- gbm(
+#     formula = total_cases ~ .,
+#     distribution = "poisson",
+#     data = iq_train_,
+#     n.trees = 2000,
+#     interaction.depth = hyper_grid$interaction.depth[i],
+#     shrinkage = hyper_grid$shrinkage[i],
+#     n.minobsinnode = hyper_grid$n.minobsinnode[i],
+#     bag.fraction = hyper_grid$bag.fraction[i],
+#     train.fraction = .75,
+#     n.cores = NULL, # will use all cores by default
+#     verbose = FALSE
+#   )
+#   
+#   # add min training error and trees to grid
+#   hyper_grid$optimal_trees[i] <- which.min(gbm.tune$valid.error)
+#   hyper_grid$min_error[i] <- min(gbm.tune$valid.error)
+# }
+# 
+# hyper_grid %>% 
+#   dplyr::arrange(min_error) %>%
+#   head(10)
+```
+```{r}
+set.seed(123)
+gbm.fit <- gbm(
+  formula = total_cases ~ .,
+  distribution = "poisson",
+  data = iq_train_,
+  n.trees = 300,
+  interaction.depth = 2,
+  shrinkage = 0.05,
+  cv.folds = 5,
+  bag.fraction = 0.8,
+  n.minobsinnode = 7,
+  train.fraction = .75,
+  n.cores = NULL, # will use all cores by default
+  verbose = FALSE
+  )  
+
+best <- which.min(gbm.fit$cv.error) # find index for the number of trees with minimum CV error
+#best
+#gbm.fit$cv.error[best]
+#gbm.perf(gbm.fit, method = "cv")
+pred_iq <- predict(gbm.fit, n.trees = best, iq_test_, type="response")
+mae(iq_test$total_cases, pred_iq) # 4.28
+plot(iq_test$total_cases,type='l')
+lines(pred_iq, col='red')
+```
+
+The MAE score is 4.55.         
+
+Similarly for San Juan:
+
+```{r}
+# for reproducibility
+set.seed(123)
+# hyper_grid <- expand.grid(
+#   shrinkage = c(.05, .1, .2),
+#   interaction.depth = c(1, 2, 3),
+#   n.minobsinnode = c(5, 7, 10),
+#   bag.fraction = c(.65, .8, 1), 
+#   optimal_trees = 0,               # number of trees
+#   min_error = 0                     # min error
+# )
+# 
+# # grid search
+# for(i in 1:nrow(hyper_grid)) {
+#   # train model
+#   print(i)
+#   gbm.tune <- gbm(
+#     formula = total_cases ~ .,
+#     distribution = "poisson",
+#     data = sj_train,
+#     n.trees = 2000,
+#     interaction.depth = hyper_grid$interaction.depth[i],
+#     shrinkage = hyper_grid$shrinkage[i],
+#     n.minobsinnode = hyper_grid$n.minobsinnode[i],
+#     bag.fraction = hyper_grid$bag.fraction[i],
+#     train.fraction = .75,
+#     n.cores = NULL, # will use all cores by default
+#     verbose = FALSE
+#   )
+#   
+#   # add min training error and trees to grid
+#   hyper_grid$optimal_trees[i] <- which.min(gbm.tune$valid.error)
+#   hyper_grid$min_error[i] <- min(gbm.tune$valid.error)
+# }
+# 
+# hyper_grid %>% 
+#   dplyr::arrange(min_error) %>%
+#   head(10)
+```
+```{r}
+gbm.fit <- gbm(
+  formula = total_cases ~ .,
+  distribution = "poisson",
+  data = sj_train_,
+  n.trees = 500,
+  interaction.depth = 3,
+  shrinkage = 0.2,
+  cv.folds = 5,
+  bag.fraction = 0.8,
+  train.fraction = .75,
+  n.cores = NULL, # will use all cores by default
+  verbose = FALSE
+)  
+
+best <- which.min(gbm.fit$cv.error) # find index for the number of trees with minimum CV error
+#best
+#gbm.fit$cv.error[best]
+#gbm.perf(gbm.fit, method = "cv")
+pred_sj <- predict(gbm.fit, n.trees = best, sj_test_, type="response")
+mae(sj_test$total_cases, pred_sj)
+plot(sj_test$total_cases,type='l')
+lines(pred_sj, col='red')
+```
 
 ### Expert Aggregation 
+```{r echo = FALSE, message = FALSE}
+library(opera)
+```
+In this section, we collect some of the models above and put together an aggregation of experts model, a strategy in sequential learning.         
+For Iquitos, we will put together the following models:    
+
+* a GAM model, MAE = 5.54                 
+* a CART model, MAE = 5.49      
+* a Random Forest model, MAE = 5.07    
+* a ARIMA model, MAE = 4.27      
+* a Boosted Tree model, MAE = 4.36        
+```{r}
+set.seed(123)
+gam_iq <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
+          + s(population_total) 
+          + s(Time) + s(weekofyear) 
+          + s(log(lag_1_total_cases+1)) + s(log(lag_2_total_cases+1))+ s(log(lag_3_total_cases+1))
+          ,family = nb(), data = iq_train, method = "REML")
+gam_iq_forecast <- predict(gam_iq, newdata = iq_test, type = "response")
+#mae(gam_iq_forecast, iq_test$total_cases)
+#########################################################################
+tree_iq <- rpart(formula = total_cases ~ ., 
+                 data = iq_train,
+                 method = "anova")
+tree_iq_forecast <- predict(tree_iq, newdata = iq_test)
+#mae(tree_iq_forecast, iq_test$total_cases)
+#########################################################################
+rf_iq <- randomForest(total_cases~.,ntree=500,data=iq_train, importance = TRUE, mtry = 3)
+rf_iq_forecast <- predict(rf_iq,newdata=iq_test)
+#mae(rf_iq_forecast, iq_test$total_cases)
+#########################################################################
+ts_iq<-ts(iq_train$total_cases, frequency=1) 
+fit2_iq <- Arima(ts_iq, order=c(3,1,6), method=c("CSS"))
+ts_forecast <- ts(merged_iq_train$total_cases,  frequency=1)
+refit2_iq <- Arima(ts_forecast, model=fit2_iq)
+arima_iq_forecast <- tail(refit2_iq$fitted, nrow(iq_test))
+#mae(arima_iq_forecast, iq_test$total_cases)
+#########################################################################
+gbm.fit <- gbm(
+  formula = total_cases ~ .,
+  distribution = "poisson",
+  data = iq_train_,
+  n.trees = 300,
+  interaction.depth = 2,
+  shrinkage = 0.05,
+  cv.folds = 5,
+  bag.fraction = 0.8,
+  n.minobsinnode = 7,
+  train.fraction = .75,
+  n.cores = NULL, # will use all cores by default
+  verbose = FALSE
+)  
+
+best <- which.min(gbm.fit$cv.error) # find index for the number of trees with minimum CV error
+gbm_iq_forecast <- predict(gbm.fit, n.trees = best, iq_test_, type="response")
+#mae(gbm_iq_forecast, iq_test$total_cases)
+```
+
+The aggregation expert prediction is formed using the EWA method, using the absolute loss. It gives a reduced MAE score of 4.17.  
+
+```{r}
+experts <- cbind(gam_iq_forecast, tree_iq_forecast,
+                 rf_iq_forecast, arima_iq_forecast,
+                 gbm_iq_forecast)
+colnames(experts)<-c("gam", "tree", "forest", "arima", "gbm")
+
+MLpol <- mixture(Y = iq_test$total_cases, experts = experts, 
+                        loss.type = "absolute", model = "EWA", loss.gradient = F)
+aggregation_iq_forecast <- MLpol$prediction
+mae(iq_test$total_cases, aggregation_iq_forecast) # 4.17
+par(mfrow=c(1,1))
+plot(iq_test$total_cases,type='l')
+lines(aggregation_iq_forecast, col='red')
+```
+
+
+For San Juan, we will put together the following models:     
+* a Tree model, MAE = 8.95     
+* a Random Forest Model, MAE = 7.62         
+* a Boosted Tree Model, MAE = 7.04      
+
+```{r}
+tree_sj <- rpart(formula = total_cases ~ ., 
+                 data = sj_train,
+                 method = "anova")
+tree_sj_forecast <- predict(tree_sj, newdata = sj_test)
+
+rf_sj=randomForest(total_cases~.,ntree=500, data=sj_train, importance = TRUE, mtry = 13)
+rf_sj_forecast=predict(rf_sj,newdata=sj_test)
+
+
+gbm_sj <- gbm(
+  formula = total_cases ~ .,
+  distribution = "poisson",
+  data = sj_train_,
+  n.trees = 500,
+  interaction.depth = 3,
+  shrinkage = 0.2,
+  cv.folds = 5,
+  bag.fraction = 0.8,
+  train.fraction = .75,
+  n.cores = NULL, # will use all cores by default
+  verbose = FALSE
+)  
+
+best <- which.min(gbm_sj$cv.error) # find index for the number of trees with minimum CV error
+#best
+#gbm.fit$cv.error[best]
+#gbm.perf(gbm.fit, method = "cv")
+bgm_sj_forecast <- predict(gbm_sj, n.trees = best, sj_test_, type="response")
+```
+
+The aggregation expert prediction is formed using the EWA method, using the absolute loss. It gives a MAE score of 7.18, which is slightly above the best expert. It's different from the EWA algorithm for linear loss, where the regret is always non-negative.    
+
+
+```{r}
+experts <- cbind(tree_sj_forecast,
+                 rf_sj_forecast,
+                 bgm_sj_forecast)
+colnames(experts)<-c("tree", "forest", "gbm")
+MLpol <- mixture(Y = sj_test$total_cases, experts = experts, 
+                 loss.type = "absolute", model = "EWA", loss.gradient = F)
+aggregation_sj_forecast <- MLpol$prediction
+mae(sj_test$total_cases, aggregation_sj_forecast) # 7.18
+par(mfrow=c(1,1))
+plot(sj_test$total_cases,type='l')
+lines(aggregation_sj_forecast, col='red')
+
+```
 
 ## Conclusion
-
+In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Aggregation Experts to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. Together with a more fine tuning of the models and a better choice of putting the models together, it's promising that these models could achieve a better result.    
 

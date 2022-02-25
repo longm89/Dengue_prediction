@@ -8,6 +8,8 @@ library(rpart.plot)
 library(caret)
 library(party)
 library(randomForest)
+# set the seed 
+set.seed(500)
 
 # mean of absolute value of errors
 mae<-function(y,ychap)
