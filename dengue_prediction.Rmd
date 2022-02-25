@@ -28,7 +28,7 @@ library(forecast)
 library(TSA) # for plotting periodogram
 ```
 ## Introduction 
-The purpose of the project is to predict the number of dengue cases in two cities, San Juan and Iquitos for each week, using environmental and climate variables. The challenge was organized in 2015 by several departments in the U.S. Federal Government (Department of Health and Human Services, Department of Defense, Department of Commerce, and the Department of Homeland Security), with the support of the Pandemic Prediction and Forecasting Science and Technology Interagency Working Group under the National Science and Technology Council (https://dengueforecasting.noaa.gov/).
+The purpose of the project is to predict the number of dengue cases in two cities, San Juan and Iquitos for each week, using environmental and climate variables. The challenge was organized in 2015 by several departments in the U.S. Federal Government, with the support of the Pandemic Prediction and Forecasting Science and Technology Interagency Working Group under the National Science and Technology Council (https://dengueforecasting.noaa.gov/).
 
 #### Data 
 The data for each city consists of:   
@@ -59,7 +59,9 @@ We will model the total number of cases using the following models:
 * Random Forest        
 * Times Series (ARIMA)                  
 * Gradient Tree Boosting             
-* Expert Aggregation       
+* Expert Aggregation (EG)       
+
+As our data is count data, we will be using the Poisson distribution and the Negative Binomial Distribution family when we apply the models GAM and Gradient Tree Boosting. The metric to judge the quality of the models in the competition is the MAE score, but we will also look at R squared, deviance explained, ACF, PACF graphs and plot of the residuals. In general, our out-of the box models achieve good results without much tuning. There are many places where the results could be improved. For example, there are some models with residuals of mean 0, but with changes in the variance, we could have applied an ARIMA model to the residuals of the model GAM, or we could fine-tune more the parameters of the models and do more feature engineering. 
 
 ## Data Wrangling and Exploration 
 #### Data Wrangling   
@@ -95,7 +97,7 @@ The data for each city consists of:
   + ndvi_ne – Pixel northeast of city centroid
   + ndvi_nw – Pixel northwest of city centroid
   
-We separate the csv file, including the two countries, into each file for each country and add the missing values using spline interpolation.   
+We separate the csv file, including environmental data of the two countries, into one file for each country and add the missing values using spline interpolation.   
 
 ##### Data from WorldBank           
 
@@ -270,7 +272,7 @@ sj_test <- tail(merged_sj_train, nrow(merged_sj_train) - sj_train_size)
 
 ```
 
-We will use MAE score to evaluate different models.
+The MAE score will be used, as in the competition, to evaluate different models.
 ```{r}
 mae<-function(y, ychap)
 {
@@ -322,7 +324,7 @@ iq_weekly_cases <- ggplot(iq_train, aes(week_start_date, total_cases - train_ych
 iq_weekly_cases
 ```
 
-There are still a lot of auto-correlations in the data and there's a problem with the variance in the residues. We look at how it fits on the testing set and the MAE score: 
+There are still a lot of auto-correlations in the data and there's a problem with the variance in the residues. We look at how it fits on the testing set and look at the MAE score: 
 
 ```{r echo = TRUE, message = FALSE}
 # on test set
@@ -333,7 +335,7 @@ lines(test_ychap,col='red')
 mae(iq_test$total_cases, test_ychap)
 ```
 
-One idea to improve the model is to fit a SARIMA model to the residuals. In the following, to make things simple, we will add lag variables to improve the model:    
+One idea to improve the model is to fit a SARIMA model to the residuals. In the following, to make things simple, we will just add lag variables to improve the model:    
 
 ```{r}
 g2 <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
@@ -452,7 +454,7 @@ plot(iq_test$total_cases, type='l')
 lines(rf1.forecast,col='red')
 ```
 
-The variance explained is 50.61%. The MAE score on test set is 5.08, better than the MAE score of 5.49 of the tree model. The prediction is more robust.      
+The variance explained is 50.61%. The MAE score on test set is 5.08, better than the MAE score of 5.49 of the tree model. The prediction is more robust and more accurate, as expected when comparing with a decision tree.      
 
 Similarly for San Juan:      
 
@@ -466,7 +468,7 @@ plot(sj_test$total_cases, type='l')
 lines(rf1.forecast,col='red')
 ```
 
-The Random Forest model works surprisingly well for San Juan, with variance explained = 91.81%. The MAE score on test set is is 7.55. The prediction is very robust.   
+The Random Forest model works surprisingly well for San Juan, with variance explained = 91.81%. The MAE score on test set is is 7.55.   
 
 ### Times Series (ARIMA model)      
 ```{r message = FALSE}
@@ -556,7 +558,7 @@ pacf(iq_train$total_cases - train_ARIMA1_iq)
 plot(iq_train$total_cases - train_ARIMA1_iq)
 ```
 
-The ACF and PACF graphs show that there are still little auto-correlations. The residuals look random, even though there's still a problem of the variance. 
+The ACF and PACF graphs show that there are still little auto-correlations. The residuals look random, even though there's still a little problem with the variance. 
 
 ```{r}
 # check the MAE on test set
@@ -568,7 +570,7 @@ plot(iq_test$total_cases,type='l')
 lines(predict_ARIMA1_iq%>%as.numeric, col='red')
 ```
 
-The MAE score on test set is 4.42 and our model could fit the data.         
+The MAE score on test set is 4.42 and our model could fit the data and there seems to be a lag of 1-week in the prediction.         
 
 We proceed with taking the difference of the original series and fitting another ARIMA model, in spite of the variance in the difference.   
 ```{r}
@@ -614,7 +616,7 @@ plot(iq_test$total_cases,type='l')
 lines(prevARIMA2_iq%>%as.numeric, col='red')
 ```
 
-The MAE score is 4.27 and we could predict the peaks.  
+The MAE score on the test set is 4.27 and we could predict the peaks, even though there seems to be a lag of 1 week.  
 
 ### Gradient Boosting
 ```{r echo=FALSE, message = FALSE}
@@ -626,7 +628,7 @@ sj_test_ <- sj_test %>% subset(select = -c(city, week_start_date))
 ```
 
 
-In this section, we build Gradient Boosted trees models, powerful ensembles of decision trees as weak learners. Unlike Random Forest models, which perform well with little hyperparameters tuning, for GBM models, we need to tune boosting parameters such as the number of trees and the learning rate, as well as tree specific parameters such as tree depth and the minimum numbers of observations in the terminal nodes. For simplicity, we will just use a grid search to find some best hyper-parameters. The family distribution is "poisson" for counting data.    
+In this section, we build Gradient Boosted trees models, which are powerful ensembles of decision trees as weak learners. Unlike Random Forest models, which perform well with little hyper-parameters tuning, for GBM models, we need to tune boosting parameters such as the number of trees and the learning rate, as well as tree specific parameters such as tree depth and the minimum numbers of observations in the terminal nodes. For simplicity, we will just use a grid search to find some best hyper-parameters. The family distribution is "poisson" for counting data.    
 
 For Iquitos:           
 ```{r}
@@ -693,7 +695,7 @@ plot(iq_test$total_cases,type='l')
 lines(pred_iq, col='red')
 ```
 
-The MAE score is 4.55.         
+The MAE score is 4.55, lower than the one of Random Forest.          
 
 Similarly for San Juan:
 
@@ -737,6 +739,7 @@ set.seed(123)
 #   head(10)
 ```
 ```{r}
+set.seed(123)
 gbm.fit <- gbm(
   formula = total_cases ~ .,
   distribution = "poisson",
@@ -761,18 +764,19 @@ plot(sj_test$total_cases,type='l')
 lines(pred_sj, col='red')
 ```
 
-### Expert Aggregation 
+### Expert Aggregation (Exponentiated Gradient forecaster)
 ```{r echo = FALSE, message = FALSE}
 library(opera)
 ```
-In this section, we collect some of the models above and put together an aggregation of experts model, a strategy in sequential learning.         
+In this section, we collect some of the models above and put together an aggregation of experts model, a strategy in sequential learning. This model could perform as best as the convex combination of the best experts, hence in the long run could potentially outperform the best expert.    
+
 For Iquitos, we will put together the following models:    
 
 * a GAM model, MAE = 5.54                 
 * a CART model, MAE = 5.49      
-* a Random Forest model, MAE = 5.07    
+* a Random Forest model, MAE = 5.09    
 * a ARIMA model, MAE = 4.27      
-* a Boosted Tree model, MAE = 4.36        
+* a Boosted Tree model, MAE = 4.41        
 ```{r}
 set.seed(123)
 gam_iq <- gam(total_cases ~ s(reanalysis_specific_humidity_g_per_kg) + s(reanalysis_dew_point_temp_k) + s(ndvi_sw)
@@ -820,18 +824,19 @@ gbm_iq_forecast <- predict(gbm.fit, n.trees = best, iq_test_, type="response")
 #mae(gbm_iq_forecast, iq_test$total_cases)
 ```
 
-The aggregation expert prediction is formed using the EWA method, using the absolute loss. It gives a reduced MAE score of 4.17.  
+The aggregation expert prediction is formed using the Exponentiated Gradient forecaster algorithm. As our metric is MAE, we will be using the absolute value function as the loss. We use model = "EWA" and loss.gradient = TRUE as the EG forecaster algorithm is the EWA algorithm with the gradient of the loss function as the loss vectors. It gives a MAE score of 4.2.  
 
 ```{r}
+set.seed(123)
 experts <- cbind(gam_iq_forecast, tree_iq_forecast,
                  rf_iq_forecast, arima_iq_forecast,
                  gbm_iq_forecast)
 colnames(experts)<-c("gam", "tree", "forest", "arima", "gbm")
 
 MLpol <- mixture(Y = iq_test$total_cases, experts = experts, 
-                        loss.type = "absolute", model = "EWA", loss.gradient = F)
+                        loss.type = "absolute", model = "EWA", loss.gradient = TRUE)
 aggregation_iq_forecast <- MLpol$prediction
-mae(iq_test$total_cases, aggregation_iq_forecast) # 4.17
+#mae(iq_test$total_cases, aggregation_iq_forecast) # 4.2
 par(mfrow=c(1,1))
 plot(iq_test$total_cases,type='l')
 lines(aggregation_iq_forecast, col='red')
@@ -841,17 +846,18 @@ lines(aggregation_iq_forecast, col='red')
 For San Juan, we will put together the following models:     
 * a Tree model, MAE = 8.95     
 * a Random Forest Model, MAE = 7.62         
-* a Boosted Tree Model, MAE = 7.04      
+* a Boosted Tree Model, MAE = 7.26  
 
 ```{r}
+set.seed(123)
 tree_sj <- rpart(formula = total_cases ~ ., 
                  data = sj_train,
                  method = "anova")
 tree_sj_forecast <- predict(tree_sj, newdata = sj_test)
-
+#mae(sj_test$total_cases, tree_sj_forecast)
 rf_sj=randomForest(total_cases~.,ntree=500, data=sj_train, importance = TRUE, mtry = 13)
 rf_sj_forecast=predict(rf_sj,newdata=sj_test)
-
+#mae(sj_test$total_cases, rf_sj_forecast)
 
 gbm_sj <- gbm(
   formula = total_cases ~ .,
@@ -872,26 +878,28 @@ best <- which.min(gbm_sj$cv.error) # find index for the number of trees with min
 #gbm.fit$cv.error[best]
 #gbm.perf(gbm.fit, method = "cv")
 bgm_sj_forecast <- predict(gbm_sj, n.trees = best, sj_test_, type="response")
+#mae(sj_test$total_cases, bgm_sj_forecast) # 7.26
 ```
-
-The aggregation expert prediction is formed using the EWA method, using the absolute loss. It gives a MAE score of 7.18, which is slightly above the best expert. It's different from the EWA algorithm for linear loss, where the regret is always non-negative.    
 
 
 ```{r}
+set.seed(123)
 experts <- cbind(tree_sj_forecast,
                  rf_sj_forecast,
                  bgm_sj_forecast)
 colnames(experts)<-c("tree", "forest", "gbm")
 MLpol <- mixture(Y = sj_test$total_cases, experts = experts, 
-                 loss.type = "absolute", model = "EWA", loss.gradient = F)
+                 loss.type = "absolute", model = "EWA", loss.gradient = TRUE)
 aggregation_sj_forecast <- MLpol$prediction
-mae(sj_test$total_cases, aggregation_sj_forecast) # 7.18
+#mae(sj_test$total_cases, aggregation_sj_forecast) # 7.47
 par(mfrow=c(1,1))
 plot(sj_test$total_cases,type='l')
 lines(aggregation_sj_forecast, col='red')
 
 ```
 
+In the case of San Juan, our aggregation of expert advices gives a MAE score of 7.47. Hence, in the case of Iquitos, the EG strategy proves to be useful as it gives predictions even better than the best experts. 
+
 ## Conclusion
-In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Aggregation Experts to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. The graphs of some of the best models show that the prediction is 1-week lag, so it might be better to predict the number of cases using the environmental data from the previous week. Together with a more fine tuning of the models, a better feature engineering and a better choice of putting the models together, it's promising that these models could achieve a better result.    
+In this report, we implemented major algorithms in machine learning: Generalized Additive Model, ARIMA, Random Forest, Gradient Boosting Trees, Exponentiated Gradient forecaster to predict the total number of cases of Dengue disease. The models achieve good results without the need to carefully tune the hyper-parameters. A difficulty in some of these models is that the residuals have mean 0, but still have variance. A direction to solve this problem, as suggested in class is to also model the variance in the data. The graphs of some of the best models show that the prediction is 1-week lag, so it might be better to predict the number of cases of the current week using the environmental data from the previous week. Together with a more fine tuning of the models, a better feature engineering and a better choice of chaining the models together, it's promising that these models could achieve a even better result.    
 

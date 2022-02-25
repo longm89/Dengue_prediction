@@ -1,7 +1,6 @@
 rm(list=objects())
 library(dplyr)
 library(gbm)
-library(xgboost)
 library(magrittr)
 library(dplyr)
 library(mgcv)
@@ -143,9 +142,9 @@ colnames(experts)<-c("gam", "tree", "forest", "arima", "gbm")
 # * a ARIMA model, MAE = 4.27
 # * a Boosted Tree model, MAE = 4.41
 MLpol <- mixture(Y = iq_test$total_cases, experts = experts, 
-                        loss.type = "absolute", model = "EWA", loss.gradient = F)
+                        loss.type = "absolute", model = "EWA", loss.gradient = TRUE)
 aggregation_iq_forecast <- MLpol$prediction
-mae(iq_test$total_cases, aggregation_iq_forecast) # 4.17
+mae(iq_test$total_cases, aggregation_iq_forecast) # 4.2
 par(mfrow=c(1,1))
 plot(iq_test$total_cases,type='l')
 lines(aggregation_iq_forecast, col='red')
@@ -183,20 +182,19 @@ best <- which.min(gbm_sj$cv.error) # find index for the number of trees with min
 #gbm.perf(gbm.fit, method = "cv")
 bgm_sj_forecast <- predict(gbm_sj, n.trees = best, sj_test_, type="response")
 mae(sj_test$total_cases, bgm_sj_forecast)
-plot(sj_test$total_cases,type='l')
-lines(bgm_sj_forecast, col='red')
+
 
 experts <- cbind(tree_sj_forecast,
                  rf_sj_forecast,
                  bgm_sj_forecast)
 colnames(experts)<-c("tree", "forest", "gbm")
 # * a Tree model, MAE = 8.95
-# * a Random Forest Model, MAE = 7.62
-# * a Boosted Tree Model, MAE = 7.04
+# * a Random Forest Model, MAE = 7.72
+# * a Boosted Tree Model, MAE = 7.33
 MLpol <- mixture(Y = sj_test$total_cases, experts = experts, 
-                 loss.type = "absolute", model = "EWA", loss.gradient = F)
+                 loss.type = "absolute", model = "EWA", loss.gradient = TRUE)
 aggregation_sj_forecast <- MLpol$prediction
-mae(sj_test$total_cases, aggregation_sj_forecast) # 7.18
+mae(sj_test$total_cases, aggregation_sj_forecast) # 7.32
 par(mfrow=c(1,1))
 plot(sj_test$total_cases,type='l')
 lines(aggregation_sj_forecast, col='red')
